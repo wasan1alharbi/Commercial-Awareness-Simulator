@@ -26,6 +26,7 @@ export const memoryFields = {
     v.object({
       type: v.literal('reflection'),
       relatedMemoryIds: v.array(v.id('memories')),
+      articleId: v.optional(v.id('articles')), // set when reflection was triggered by an article
     }),
   ),
 };
