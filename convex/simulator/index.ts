@@ -1,7 +1,10 @@
 import { v } from 'convex/values';
-import { internalAction, internalMutation } from '../_generated/server';
+import { internalAction, internalMutation, internalQuery } from '../_generated/server';
 import { internal } from '../_generated/api';
-import { gateAgentPrompt } from './gateAgent';
+import { gateAgentPrompt, generateIdentityPrompt } from './gateAgent';
+import { fetchWikipediaSummary } from './wikipedia';
+import { characters } from '../../data/characters';
+import { insertInput } from '../aiTown/insertInput';
 
 export const insertArticle = internalMutation({
   args: {
@@ -32,6 +35,73 @@ export const patchWorldSummary = internalMutation({
   },
 });
 
+export const findExistingCompanyAgent = internalQuery({
+  args: {
+    worldId: v.id('worlds'),
+    companyName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const agentDesc = await ctx.db
+      .query('agentDescriptions')
+      .withIndex('worldIdAndName', (q) => q.eq('worldId', args.worldId).eq('name', args.companyName))
+      .unique();
+    if (!agentDesc) return null;
+    return { agentDescId: agentDesc._id };
+  },
+});
+
+export const patchAgentRelevance = internalMutation({
+  args: {
+    agentDescId: v.id('agentDescriptions'),
+    articleRelevance: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.agentDescId, { articleRelevance: args.articleRelevance });
+  },
+});
+
+export const getAgentCount = internalQuery({
+  args: { worldId: v.id('worlds') },
+  handler: async (ctx, args) => {
+    const world = await ctx.db.get(args.worldId);
+    return world ? world.agents.length : 0;
+  },
+});
+
+export const spawnCompanyAgent = internalMutation({
+  args: {
+    worldId: v.id('worlds'),
+    name: v.string(),
+    character: v.string(),
+    identity: v.string(),
+    plan: v.string(),
+    industry: v.string(),
+    products: v.array(v.string()),
+    competitors: v.array(v.string()),
+    goals: v.array(v.string()),
+    motivation: v.string(),
+    personality: v.string(),
+    articleRelevance: v.optional(v.string()),
+    country: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await insertInput(ctx, args.worldId, 'createAgentFromDescription', {
+      name: args.name,
+      character: args.character,
+      identity: args.identity,
+      plan: args.plan,
+      industry: args.industry,
+      products: args.products,
+      competitors: args.competitors,
+      goals: args.goals,
+      motivation: args.motivation,
+      personality: args.personality,
+      articleRelevance: args.articleRelevance,
+      country: args.country,
+    });
+  },
+});
+
 export const submitArticle = internalAction({
   args: {
     worldId: v.id('worlds'),
@@ -59,6 +129,68 @@ export const submitArticle = internalAction({
       worldId: args.worldId,
       summary: result.summary,
     });
+
+    for (let i = 0; i < result.companies.length; i++) {
+      const compName = result.companies[i];
+
+      let existingAgent = await ctx.runQuery(internal.simulator.index.findExistingCompanyAgent, {
+        worldId: args.worldId,
+        companyName: compName,
+      });
+
+      if (!existingAgent) {
+        let wikiText = '';
+        try {
+          // Fetch Wikipedia summary for the company to help the AI build a more complete identity. If this fails for any reason, we just proceed with an empty string and let the AI deal with it.
+          wikiText = await fetchWikipediaSummary(compName);
+        } catch (e) {
+          console.error('Wikipedia fetch failed for', compName, e);
+          wikiText = 'No information available.';
+        }
+
+        const newIdentity = await generateIdentityPrompt(compName, wikiText, result.summary);
+
+        // which character avatar to assign
+        const totalAgents = await ctx.runQuery(internal.simulator.index.getAgentCount, {
+          worldId: args.worldId,
+        });
+        // TODO: make sure characters array is never empty
+        const charName = characters[totalAgents % characters.length].name;
+
+        // Build the system prompt
+        let idString = 'You are ' + compName + '. You are in the ' + newIdentity.industry + ' industry. \n';
+        idString += 'Your products are: ' + newIdentity.products.join(', ') + '. \n';
+        idString += 'Your rivals: ' + newIdentity.competitors.join(', ') + '. \n';
+        idString += 'Motivation: ' + newIdentity.motivation + ' \n';
+        idString += 'Personality: ' + newIdentity.personality;
+
+        // Push new agent to the database
+        await ctx.runMutation(internal.simulator.index.spawnCompanyAgent, {
+          worldId: args.worldId,
+          name: compName,
+          character: charName,
+          identity: idString,
+          plan: newIdentity.goals.join(' | '),
+          industry: newIdentity.industry,
+          products: newIdentity.products,
+          competitors: newIdentity.competitors,
+          goals: newIdentity.goals,
+          motivation: newIdentity.motivation,
+          personality: newIdentity.personality,
+          articleRelevance: newIdentity.articleRelevance,
+          country: newIdentity.country || 'Unknown', // Added fallback just in case
+        });
+      } else {
+        // Agent already exists, just update how relevant this news is to them
+        // NOTE: put a prompt for the AI to generate a real reason here
+        // Hardcoding for now just to get the simulation running.
+        const updateText = `This breaking news directly impacts ${compName}'s current market strategy.`;
+        await ctx.runMutation(internal.simulator.index.patchAgentRelevance, {
+          agentDescId: existingAgent.agentDescId,
+          articleRelevance: updateText,
+        });
+      }
+    }
 
     return { success: true, articleId, companies: result.companies, summary: result.summary };
   },
