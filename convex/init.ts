@@ -58,6 +58,7 @@ async function getOrCreateDefaultWorld(ctx: MutationCtx) {
     agents: [],
     conversations: [],
     players: [],
+    publicStatements: [],
   });
   const worldStatusId = await ctx.db.insert('worldStatus', {
     engineId: engineId,
