@@ -105,6 +105,16 @@ export class Agent {
       delete this.toRemember;
       return;
     }
+    const currentSummary = game.world.currentArticleSummary;
+    if (currentSummary !== undefined && currentSummary !== this.lastProcessedSummary) {
+      console.log(`Agent ${this.id} processing new world context`);
+      this.lastProcessedSummary = currentSummary;
+      this.startOperation(game, now, 'agentProcessWorldContext', {
+        worldId: game.worldId,
+        agentId: this.id,
+      });
+      return;
+    }
     if (conversation && member) {
       const [otherPlayerId, otherMember] = [...conversation.participants.entries()].find(
         ([id]) => id !== player.id,
@@ -288,7 +298,7 @@ export const serializedAgent = {
 };
 export type SerializedAgent = ObjectType<typeof serializedAgent>;
 
-type AgentOperations = typeof internal.aiTown.agentOperations;
+type AgentOperations = typeof internal.aiTown.agentOperations & typeof internal.simulator.agentWorldContext;
 
 export async function runAgentOperation(ctx: MutationCtx, operation: string, args: any) {
   let reference;
