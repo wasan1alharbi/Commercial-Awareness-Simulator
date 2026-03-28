@@ -200,9 +200,9 @@ function wanderDestination(worldMap: WorldMap) {
   };
 }
 
-async function pickGoalDrivenTarget(ctx, worldId, goals, otherFreePlayers) {
+async function pickGoalDrivenTarget(ctx: { runQuery: (ref: any, args: any) => Promise<any> }, worldId: string, goals: string[], otherFreePlayers: { id: string }[]) {
   // get the names of all the free players so we can show them to the LLM
-  const playerNames = await ctx.runQuery(internal.aiTown.agentOperations.getPlayerNames, {
+  const playerNames: { id: string; name: string }[] = await ctx.runQuery(internal.aiTown.agentOperations.getPlayerNames, {
     worldId,
     playerIds: otherFreePlayers.map((p) => p.id),
   });

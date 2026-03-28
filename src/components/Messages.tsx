@@ -107,13 +107,12 @@ export function Messages({
       }
     }
   } else {
-    for (const playerId of conversation.doc.participants) {
-      const playerName = descriptions?.playerDescriptions.find((p) => p.playerId === playerId)
-        ?.name;
+    for (const participant of conversation.doc.participants) {
+      const playerName = participant.playerName;
       const started = conversation.doc.created;
       membershipNodes.push({
         node: (
-          <div key={`joined-${playerId}`} className="leading-tight mb-6">
+          <div key={`joined-${participant.playerId}`} className="leading-tight mb-6">
             <p className="text-brown-700 text-center">{playerName} joined the conversation.</p>
           </div>
         ),
@@ -122,7 +121,7 @@ export function Messages({
       const ended = conversation.doc.ended;
       membershipNodes.push({
         node: (
-          <div key={`left-${playerId}`} className="leading-tight mb-6">
+          <div key={`left-${participant.playerId}`} className="leading-tight mb-6">
             <p className="text-brown-700 text-center">{playerName} left the conversation.</p>
           </div>
         ),
