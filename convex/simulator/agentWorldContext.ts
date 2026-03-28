@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
-import { internalAction, internalQuery } from '../_generated/server';
+import { internalAction, internalMutation, internalQuery } from '../_generated/server';
 import { internal } from '../_generated/api';
-import { chatCompletion } from '../util/llm';
+import { chatCompletion, fetchEmbedding } from '../util/llm';
 
 export type WorldContextAction = {
   action: 'makeStatement' | 'reflect' | 'seekAgent';
@@ -10,7 +10,7 @@ export type WorldContextAction = {
   reflection?: string;
 };
 
-// fetch agent description by ID
+// get the agent description from the DB
 export const getAgentDescription = internalQuery({
   args: { agentDescriptionId: v.id('agentDescriptions') },
   handler: async (ctx, { agentDescriptionId }) => {
@@ -18,7 +18,7 @@ export const getAgentDescription = internalQuery({
   },
 });
 
-// fetch world context fields
+// get the current world context (article summary + public statements)
 export const getWorldContext = internalQuery({
   args: { worldId: v.id('worlds') },
   handler: async (ctx, { worldId }) => {
@@ -31,7 +31,62 @@ export const getWorldContext = internalQuery({
   },
 });
 
-// process world context and decide next agent action
+// get the playerId for an agent inside a world (needed to insert memories)
+export const getPlayerIdForAgent = internalQuery({
+  args: { worldId: v.id('worlds'), agentId: v.string() },
+  handler: async (ctx, { worldId, agentId }) => {
+    const world = await ctx.db.get(worldId);
+    if (!world) return null;
+    let foundPlayerId = null;
+    for (const agent of world.agents) {
+      if (agent.id === agentId) {
+        foundPlayerId = agent.playerId;
+        break;
+      }
+    }
+    return foundPlayerId;
+  },
+});
+
+// update the publicStatements array on the world document
+// if the agent already has a statement, replace it, otherwise add a new one
+export const updatePublicStatement = internalMutation({
+  args: {
+    worldId: v.id('worlds'),
+    agentName: v.string(),
+    statement: v.string(),
+  },
+  handler: async (ctx, { worldId, agentName, statement }) => {
+    const world = await ctx.db.get(worldId);
+    if (!world) {
+      throw new Error('World not found: ' + worldId);
+    }
+
+    // copy the existing statements so we can modify them
+    const existingStatements = world.publicStatements ?? [];
+    const newStatements = [...existingStatements];
+
+    // check if this agent already has a statement
+    let alreadyExists = false;
+    for (let i = 0; i < newStatements.length; i++) {
+      if (newStatements[i].agentName === agentName) {
+        // replace the old statement
+        newStatements[i] = { agentName, statement, createdAt: Date.now() };
+        alreadyExists = true;
+        break;
+      }
+    }
+
+    if (!alreadyExists) {
+      newStatements.push({ agentName, statement, createdAt: Date.now() });
+    }
+
+    await ctx.db.patch(worldId, { publicStatements: newStatements });
+    console.log('Agent ' + agentName + ' made a public statement: ' + statement);
+  },
+});
+
+// main action: look at the world context and decide what to do next
 export const agentProcessWorldContext = internalAction({
   args: {
     agentDescriptionId: v.id('agentDescriptions'),
@@ -48,7 +103,7 @@ export const agentProcessWorldContext = internalAction({
     reflection: v.optional(v.string()),
   }),
   handler: async (ctx, { agentDescriptionId, worldId }): Promise<WorldContextAction> => {
-    // Fetch structured identity
+    // get the agent's identity info
     const agentDesc = await ctx.runQuery(
       internal.simulator.agentWorldContext.getAgentDescription,
       { agentDescriptionId },
@@ -57,7 +112,7 @@ export const agentProcessWorldContext = internalAction({
       throw new Error(`AgentDescription not found: ${agentDescriptionId}`);
     }
 
-    // Fetch world context
+    // get the current world context
     const world = await ctx.runQuery(
       internal.simulator.agentWorldContext.getWorldContext,
       { worldId },
@@ -68,7 +123,7 @@ export const agentProcessWorldContext = internalAction({
 
     const { currentArticleSummary, publicStatements } = world;
 
-    // Build the system prompt with structured identity + world context
+    // build the prompt
     const name = agentDesc.name ?? 'Unknown Company';
     const industry = agentDesc.industry ?? 'Unknown Industry';
     const products = (agentDesc.products ?? []).join(', ') || 'N/A';
@@ -78,10 +133,12 @@ export const agentProcessWorldContext = internalAction({
     const personality = agentDesc.personality ?? 'N/A';
     const articleRelevance = agentDesc.articleRelevance ?? '';
 
-    const statementsText =
-      publicStatements.length > 0
-        ? publicStatements.map((s) => `  - ${s.agentName}: "${s.statement}"`).join('\n')
-        : '  (none yet)';
+    let statementsText = '  (none yet)';
+    if (publicStatements.length > 0) {
+      statementsText = publicStatements
+        .map((s) => `  - ${s.agentName}: "${s.statement}"`)
+        .join('\n');
+    }
 
     const systemPrompt = [
       `You are ${name}. The world context has changed.`,
@@ -141,5 +198,84 @@ export const agentProcessWorldContext = internalAction({
     }
 
     throw new Error('agentProcessWorldContext failed after retries');
+  },
+});
+
+export const handleWorldContextAction = internalAction({
+  args: {
+    worldId: v.id('worlds'),
+    agentId: v.string(),
+    agentDescriptionId: v.id('agentDescriptions'),
+    result: v.object({
+      action: v.string(),
+      targetAgentName: v.optional(v.string()),
+      statement: v.optional(v.string()),
+      reflection: v.optional(v.string()),
+    }),
+  },
+  returns: v.object({ targetPlayerId: v.optional(v.string()) }),
+  handler: async (ctx, args) => {
+    let agentDesc = await ctx.runQuery(
+      internal.simulator.agentWorldContext.getAgentDescription,
+      { agentDescriptionId: args.agentDescriptionId },
+    );
+    let agentName = 'Unknown';
+    if (agentDesc !== null && agentDesc !== undefined) {
+      agentName = agentDesc.name ?? 'Unknown';
+    }
+
+    console.log('Agent ' + agentName + ' chose action: ' + args.result.action);
+
+    if (args.result.action === 'makeStatement') {
+      let statementText = '';
+      if (args.result.statement !== undefined) {
+        statementText = args.result.statement;
+      }
+      await ctx.runMutation(internal.simulator.agentWorldContext.updatePublicStatement, {
+        worldId: args.worldId,
+        agentName: agentName,
+        statement: statementText,
+      });
+      return {};
+    } else if (args.result.action === 'reflect') {
+      let reflectionText = '';
+      if (args.result.reflection !== undefined) {
+        reflectionText = args.result.reflection;
+      }
+      let playerId = await ctx.runQuery(
+        internal.simulator.agentWorldContext.getPlayerIdForAgent,
+        { worldId: args.worldId, agentId: args.agentId },
+      );
+      if (playerId !== null) {
+        let embeddingResult = await fetchEmbedding(reflectionText);
+        let textEmbedding = embeddingResult.embedding;
+        await ctx.runMutation(internal.agent.memory.insertMemory, {
+          agentId: args.agentId,
+          playerId: playerId,
+          description: reflectionText,
+          embedding: textEmbedding,
+          importance: 5,
+          lastAccess: Date.now(),
+          data: {
+            type: 'reflection',
+            relatedMemoryIds: [],
+          },
+        });
+        console.log('Agent ' + agentName + ' stored a reflection: ' + reflectionText);
+        return {};
+      } else {
+        console.log('Error: Could not find playerId for agent ' + args.agentId);
+        return {};
+      }
+    } else if (args.result.action === 'seekAgent') {
+      let targetName = undefined;
+      if (args.result.targetAgentName !== undefined) {
+        targetName = args.result.targetAgentName;
+      }
+      console.log('Agent ' + agentName + ' wants to seek: ' + targetName);
+      return { targetPlayerId: targetName };
+    } else {
+      return {};
+    }
   },
 });
