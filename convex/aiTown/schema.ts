@@ -57,7 +57,7 @@ export const aiTownTables = {
     ended: v.number(),
     lastMessage: serializedConversation.lastMessage,
     numMessages: serializedConversation.numMessages,
-    participants: v.array(playerId),
+    participants: v.array(v.object({ playerId: v.string(), playerName: v.string() })),
   }).index('worldId', ['worldId', 'id']),
   archivedAgents: defineTable({ worldId: v.id('worlds'), ...serializedAgent }).index('worldId', [
     'worldId',

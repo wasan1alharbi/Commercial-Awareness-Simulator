@@ -261,7 +261,16 @@ export class Game extends AbstractGame {
     }
     for (const conversation of existingWorld.conversations) {
       if (!newWorld.conversations.some((c) => c.id === conversation.id)) {
-        const participants = conversation.participants.map((p) => p.playerId);
+        const participantIds = conversation.participants.map((p) => p.playerId);
+        const participants = await Promise.all(
+          participantIds.map(async (pid) => {
+            const desc = await ctx.db
+              .query('playerDescriptions')
+              .withIndex('worldId', (q) => q.eq('worldId', worldId).eq('playerId', pid))
+              .unique();
+            return { playerId: pid, playerName: desc?.name ?? pid };
+          }),
+        );
         const archivedConversation = {
           worldId,
           id: conversation.id,
@@ -278,8 +287,8 @@ export class Game extends AbstractGame {
             if (i == j) {
               continue;
             }
-            const player1 = participants[i];
-            const player2 = participants[j];
+            const player1 = participants[i].playerId;
+            const player2 = participants[j].playerId;
             await ctx.db.insert('participatedTogether', {
               worldId,
               conversationId: conversation.id,
