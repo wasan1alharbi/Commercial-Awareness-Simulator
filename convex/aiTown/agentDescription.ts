@@ -23,5 +23,13 @@ export const serializedAgentDescription = {
   agentId,
   identity: v.string(),
   plan: v.string(),
+  industry: v.optional(v.string()),
+  products: v.optional(v.array(v.string())),
+  competitors: v.optional(v.array(v.string())),
+  goals: v.optional(v.array(v.string())),
+  motivation: v.optional(v.string()),
+  personality: v.optional(v.string()),
+  articleRelevance: v.optional(v.string()),
+  lastAssessedAt: v.optional(v.number()),
 };
 export type SerializedAgentDescription = ObjectType<typeof serializedAgentDescription>;
