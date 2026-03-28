@@ -51,6 +51,16 @@ export default defineSchema({
     createdAt: v.number(),
   }).index('byWorld', ['worldId']),
 
+  kpiSnapshots: defineTable({
+    sessionId: v.id('quizSessions'),
+    profit: v.number(),
+    marketShare: v.number(),
+    liquidity: v.number(),
+    trust: v.number(),
+    compliance: v.number(),
+    updatedAt: v.number(),
+  }).index('bySession', ['sessionId']),
+
   ...agentTables,
   ...aiTownTables,
   ...engineTables,
