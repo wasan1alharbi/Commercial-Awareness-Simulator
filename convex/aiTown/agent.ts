@@ -78,6 +78,8 @@ export class Agent {
     // If we have been wandering but haven't thought about something to do for
     // a while, do something.
     if (!conversation && !doingActivity && (!player.pathfinding || !recentlyAttemptedInvite)) {
+      const agentDescription = game.agentDescriptions.get(this.id);
+      const goals = agentDescription?.goals ?? [];
       this.startOperation(game, now, 'agentDoSomething', {
         worldId: game.worldId,
         player: player.serialize(),
@@ -89,6 +91,7 @@ export class Agent {
           .map((p) => p.serialize()),
         agent: this.serialize(),
         map: game.worldMap.serialize(),
+        goals,
       });
       return;
     }
