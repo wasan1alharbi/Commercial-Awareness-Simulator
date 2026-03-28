@@ -5,7 +5,7 @@ import { Conversation, conversationInputs } from './conversation';
 import { movePlayer } from './movement';
 import { inputHandler } from './inputHandler';
 import { point } from '../util/types';
-import { Descriptions } from '../../data/characters';
+import { characters } from '../../data/characters';
 import { AgentDescription } from './agentDescription';
 import { Agent } from './agent';
 
@@ -116,19 +116,23 @@ export const agentInputs = {
       return null;
     },
   }),
-  createAgent: inputHandler({
+  createAgentFromDescription: inputHandler({
     args: {
-      descriptionIndex: v.number(),
+      name: v.string(),
+      character: v.string(),
+      identity: v.string(),
+      plan: v.string(),
+      industry: v.string(),
+      products: v.array(v.string()),
+      competitors: v.array(v.string()),
+      goals: v.array(v.string()),
+      motivation: v.string(),
+      personality: v.string(),
+      articleRelevance: v.optional(v.string()),
+      country: v.optional(v.string()),
     },
     handler: (game, now, args) => {
-      const description = Descriptions[args.descriptionIndex];
-      const playerId = Player.join(
-        game,
-        now,
-        description.name,
-        description.character,
-        description.identity,
-      );
+      const playerId = Player.join(game, now, args.name, args.character, args.identity);
       const agentId = game.allocId('agents');
       game.world.agents.set(
         agentId,
@@ -145,8 +149,17 @@ export const agentInputs = {
         agentId,
         new AgentDescription({
           agentId: agentId,
-          identity: description.identity,
-          plan: description.plan,
+          identity: args.identity,
+          plan: args.plan,
+          name: args.name,
+          industry: args.industry,
+          products: args.products,
+          competitors: args.competitors,
+          goals: args.goals,
+          motivation: args.motivation,
+          personality: args.personality,
+          articleRelevance: args.articleRelevance,
+          country: args.country,
         }),
       );
       return { agentId };
