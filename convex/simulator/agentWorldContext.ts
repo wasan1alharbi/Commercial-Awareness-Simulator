@@ -86,11 +86,47 @@ export const updatePublicStatement = internalMutation({
   },
 });
 
+export const getAgentDescriptionByAgentId = internalQuery({
+  args: { worldId: v.id('worlds'), agentId: v.string() },
+  handler: async (ctx, { worldId, agentId }) => {
+    return await ctx.db
+      .query('agentDescriptions')
+      .withIndex('worldId', (q) => q.eq('worldId', worldId).eq('agentId', agentId))
+      .unique();
+  },
+});
+
+async function callLLMForWorldContext(systemPrompt: string): Promise<WorldContextAction> {
+  const { content } = await chatCompletion({
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: 'What do you do next given this new world context? Respond with JSON only.' },
+    ],
+    temperature: 0.7,
+    response_format: { type: 'json_object' },
+  });
+
+  const parsed = JSON.parse(String(content));
+
+  const action = parsed.action;
+  if (action !== 'makeStatement' && action !== 'reflect' && action !== 'seekAgent') {
+    throw new Error('Invalid action value: ' + parsed.action);
+  }
+
+  const result: WorldContextAction = { action };
+  if (parsed.targetAgentName) result.targetAgentName = parsed.targetAgentName;
+  if (parsed.statement) result.statement = parsed.statement;
+  if (parsed.reflection) result.reflection = parsed.reflection;
+
+  return result;
+}
+
 // main action: look at the world context and decide what to do next
 export const agentProcessWorldContext = internalAction({
   args: {
-    agentDescriptionId: v.id('agentDescriptions'),
+    agentId: v.string(),
     worldId: v.id('worlds'),
+    operationId: v.string(),
   },
   returns: v.object({
     action: v.union(
@@ -102,14 +138,14 @@ export const agentProcessWorldContext = internalAction({
     statement: v.optional(v.string()),
     reflection: v.optional(v.string()),
   }),
-  handler: async (ctx, { agentDescriptionId, worldId }): Promise<WorldContextAction> => {
+  handler: async (ctx, { agentId, worldId }): Promise<WorldContextAction> => {
     // get the agent's identity info
     const agentDesc = await ctx.runQuery(
-      internal.simulator.agentWorldContext.getAgentDescription,
-      { agentDescriptionId },
+      internal.simulator.agentWorldContext.getAgentDescriptionByAgentId,
+      { worldId, agentId },
     );
     if (!agentDesc) {
-      throw new Error(`AgentDescription not found: ${agentDescriptionId}`);
+      throw new Error('AgentDescription not found for agent: ' + agentId);
     }
 
     // get the current world context
@@ -118,10 +154,8 @@ export const agentProcessWorldContext = internalAction({
       { worldId },
     );
     if (!world) {
-      throw new Error(`World not found: ${worldId}`);
+      throw new Error('World not found: ' + worldId);
     }
-
-    const { currentArticleSummary, publicStatements } = world;
 
     // build the prompt
     const name = agentDesc.name ?? 'Unknown Company';
@@ -132,72 +166,54 @@ export const agentProcessWorldContext = internalAction({
     const motivation = agentDesc.motivation ?? 'N/A';
     const personality = agentDesc.personality ?? 'N/A';
     const articleRelevance = agentDesc.articleRelevance ?? '';
+    const currentArticleSummary = world.currentArticleSummary ?? '(no article yet)';
+    const publicStatements = world.publicStatements;
 
     let statementsText = '  (none yet)';
     if (publicStatements.length > 0) {
-      statementsText = publicStatements
-        .map((s) => `  - ${s.agentName}: "${s.statement}"`)
-        .join('\n');
-    }
-
-    const systemPrompt = [
-      `You are ${name}. The world context has changed.`,
-      `Identity:`,
-      `  Industry: ${industry}`,
-      `  Products: ${products}`,
-      `  Competitors: ${competitors}`,
-      `  Goals: ${goals}`,
-      `  Motivation: ${motivation}`,
-      `  Personality: ${personality}`,
-      ...(articleRelevance ? [`  Your stance on news: ${articleRelevance}`] : []),
-      ``,
-      `Current news: ${currentArticleSummary ?? '(no article yet)'}`,
-      ``,
-      `Public statements from other companies:`,
-      statementsText,
-      ``,
-      `Decide your next action. Return ONLY valid JSON:`,
-      `{ "action": "seekAgent" | "makeStatement" | "reflect", "targetAgentName": string | null, "statement": string | null, "reflection": string | null }`,
-    ].join('\n');
-
-    for (let i = 0; i < 3; i++) {
-      try {
-        const { content } = await chatCompletion({
-          messages: [
-            { role: 'system', content: systemPrompt },
-            {
-              role: 'user',
-              content: 'What do you do next given this new world context? Respond with JSON only.',
-            },
-          ],
-          temperature: 0.7,
-          response_format: { type: 'json_object' },
-        });
-
-        const parsed = JSON.parse(content as string) as {
-          action: string;
-          targetAgentName?: string | null;
-          statement?: string | null;
-          reflection?: string | null;
-        };
-
-        const action = parsed.action as WorldContextAction['action'];
-        if (action !== 'makeStatement' && action !== 'reflect' && action !== 'seekAgent') {
-          throw new Error(`Invalid action value: ${parsed.action}`);
-        }
-
-        const result: WorldContextAction = { action };
-        if (parsed.targetAgentName) result.targetAgentName = parsed.targetAgentName;
-        if (parsed.statement) result.statement = parsed.statement;
-        if (parsed.reflection) result.reflection = parsed.reflection;
-
-        return result;
-      } catch (err) {
-        if (i === 2) throw err;
+      statementsText = '';
+      for (const s of publicStatements) {
+        statementsText += `  - ${s.agentName}: "${s.statement}"\n`;
       }
     }
 
-    throw new Error('agentProcessWorldContext failed after retries');
+    let systemPrompt = `You are ${name}. The world context has changed.\n`;
+    systemPrompt += `Identity:\n`;
+    systemPrompt += `  Industry: ${industry}\n`;
+    systemPrompt += `  Products: ${products}\n`;
+    systemPrompt += `  Competitors: ${competitors}\n`;
+    systemPrompt += `  Goals: ${goals}\n`;
+    systemPrompt += `  Motivation: ${motivation}\n`;
+    systemPrompt += `  Personality: ${personality}\n`;
+    if (articleRelevance) {
+      systemPrompt += `  Your stance on news: ${articleRelevance}\n`;
+    }
+    systemPrompt += `\nCurrent news: ${currentArticleSummary}\n`;
+    systemPrompt += `\nPublic statements from other companies:\n${statementsText}\n`;
+    systemPrompt += `Decide your next action. Return ONLY valid JSON:\n`;
+    systemPrompt += `{ "action": "seekAgent" | "makeStatement" | "reflect", "targetAgentName": string | null, "statement": string | null, "reflection": string | null }`;
+
+    let lastError: any;
+
+    try {
+      return await callLLMForWorldContext(systemPrompt);
+    } catch (err) {
+      lastError = err;
+    }
+
+    try {
+      return await callLLMForWorldContext(systemPrompt);
+    } catch (err) {
+      lastError = err;
+    }
+
+    try {
+      return await callLLMForWorldContext(systemPrompt);
+    } catch (err) {
+      lastError = err;
+    }
+
+    throw lastError;
   },
 });
 
