@@ -5,17 +5,69 @@ export class AgentDescription {
   agentId: GameId<'agents'>;
   identity: string;
   plan: string;
+  industry?: string;
+  products?: string[];
+  competitors?: string[];
+  goals?: string[];
+  motivation?: string;
+  personality?: string;
+  articleRelevance?: string;
+  lastAssessedAt?: number;
 
   constructor(serialized: SerializedAgentDescription) {
-    const { agentId, identity, plan } = serialized;
+    const {
+      agentId,
+      identity,
+      plan,
+      industry,
+      products,
+      competitors,
+      goals,
+      motivation,
+      personality,
+      articleRelevance,
+      lastAssessedAt,
+    } = serialized;
     this.agentId = parseGameId('agents', agentId);
     this.identity = identity;
     this.plan = plan;
+    this.industry = industry;
+    this.products = products;
+    this.competitors = competitors;
+    this.goals = goals;
+    this.motivation = motivation;
+    this.personality = personality;
+    this.articleRelevance = articleRelevance;
+    this.lastAssessedAt = lastAssessedAt;
   }
 
   serialize(): SerializedAgentDescription {
-    const { agentId, identity, plan } = this;
-    return { agentId, identity, plan };
+    const {
+      agentId,
+      identity,
+      plan,
+      industry,
+      products,
+      competitors,
+      goals,
+      motivation,
+      personality,
+      articleRelevance,
+      lastAssessedAt,
+    } = this;
+    return {
+      agentId,
+      identity,
+      plan,
+      industry,
+      products,
+      competitors,
+      goals,
+      motivation,
+      personality,
+      articleRelevance,
+      lastAssessedAt,
+    };
   }
 }
 
