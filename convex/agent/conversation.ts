@@ -17,7 +17,7 @@ export async function startConversationMessage(
   playerId: GameId<'players'>,
   otherPlayerId: GameId<'players'>,
 ): Promise<string> {
-  const { player, otherPlayer, agent, otherAgent, lastConversation } = await ctx.runQuery(
+  const { player, otherPlayer, agent, otherAgent, lastConversation, worldContext } = await ctx.runQuery(
     selfInternal.queryPromptData,
     {
       worldId,
@@ -44,9 +44,8 @@ export async function startConversationMessage(
   const prompt = [
     `You are ${player.name}, and you just started a conversation with ${otherPlayer.name}.`,
   ];
-  prompt.push(...agentPrompts(otherPlayer, agent, otherAgent ?? null));
+  prompt.push(...agentPrompts(otherPlayer, agent, otherAgent ?? null, worldContext, memories));
   prompt.push(...previousConversationPrompt(otherPlayer, lastConversation));
-  prompt.push(...relatedMemoriesPrompt(memories));
   if (memoryWithOtherPlayer) {
     prompt.push(
       `Be sure to include some detail or question about a previous conversation in your greeting.`,
@@ -82,7 +81,7 @@ export async function continueConversationMessage(
   playerId: GameId<'players'>,
   otherPlayerId: GameId<'players'>,
 ): Promise<string> {
-  const { player, otherPlayer, conversation, agent, otherAgent } = await ctx.runQuery(
+  const { player, otherPlayer, conversation, agent, otherAgent, worldContext } = await ctx.runQuery(
     selfInternal.queryPromptData,
     {
       worldId,
@@ -102,8 +101,7 @@ export async function continueConversationMessage(
     `You are ${player.name}, and you're currently in a conversation with ${otherPlayer.name}.`,
     `The conversation started at ${started.toLocaleString()}. It's now ${now.toLocaleString()}.`,
   ];
-  prompt.push(...agentPrompts(otherPlayer, agent, otherAgent ?? null));
-  prompt.push(...relatedMemoriesPrompt(memories));
+  prompt.push(...agentPrompts(otherPlayer, agent, otherAgent ?? null, worldContext, memories));
   prompt.push(
     `Below is the current chat history between you and ${otherPlayer.name}.`,
     `DO NOT greet them again. Do NOT use the word "Hey" too often. Your response should be brief and within 200 characters.`,
@@ -140,7 +138,7 @@ export async function leaveConversationMessage(
   playerId: GameId<'players'>,
   otherPlayerId: GameId<'players'>,
 ): Promise<string> {
-  const { player, otherPlayer, conversation, agent, otherAgent } = await ctx.runQuery(
+  const { player, otherPlayer, conversation, agent, otherAgent, worldContext } = await ctx.runQuery(
     selfInternal.queryPromptData,
     {
       worldId,
@@ -153,7 +151,7 @@ export async function leaveConversationMessage(
     `You are ${player.name}, and you're currently in a conversation with ${otherPlayer.name}.`,
     `You've decided to leave the question and would like to politely tell them you're leaving the conversation.`,
   ];
-  prompt.push(...agentPrompts(otherPlayer, agent, otherAgent ?? null));
+  prompt.push(...agentPrompts(otherPlayer, agent, otherAgent ?? null, worldContext));
   prompt.push(
     `Below is the current chat history between you and ${otherPlayer.name}.`,
     `How would you like to tell them that you're leaving? Your response should be brief and within 200 characters.`,
@@ -182,20 +180,72 @@ export async function leaveConversationMessage(
   return trimContentPrefx(content, lastPrompt);
 }
 
+type AgentPromptData = {
+  identity: string;
+  plan: string;
+  industry?: string;
+  products?: string[];
+  competitors?: string[];
+  goals?: string[];
+  motivation?: string;
+  personality?: string;
+  articleRelevance?: string;
+};
+
+type WorldContext = {
+  currentArticleSummary?: string;
+  publicStatements: Array<{ agentName: string; statement: string; createdAt: number }>;
+};
+
+function buildIdentityBlock(agent: AgentPromptData): string[] {
+  // Structured path — company agent with rich identity
+  if (agent.industry || agent.motivation) {
+    const lines = ['IDENTITY:'];
+    if (agent.industry) lines.push(`  Industry: ${agent.industry}`);
+    if (agent.products?.length) lines.push(`  Products: ${agent.products.join(', ')}`);
+    if (agent.competitors?.length) lines.push(`  Competitors: ${agent.competitors.join(', ')}`);
+    if (agent.goals?.length) lines.push(`  Goals: ${agent.goals.join('; ')}`);
+    if (agent.motivation) lines.push(`  Motivation: ${agent.motivation}`);
+    if (agent.personality) lines.push(`  Personality: ${agent.personality}`);
+    if (agent.articleRelevance) lines.push(`  Current stance on news: ${agent.articleRelevance}`);
+    return lines;
+  }
+  // Legacy fallback — original AI Town characters
+  return [`About you: ${agent.identity}`, `Your goals for the conversation: ${agent.plan}`];
+}
+
 function agentPrompts(
   otherPlayer: { name: string },
-  agent: { identity: string; plan: string } | null,
-  otherAgent: { identity: string; plan: string } | null,
+  agent: AgentPromptData | null,
+  otherAgent: AgentPromptData | null,
+  worldContext?: WorldContext,
+  memories?: Array<{ description: string }>,
 ): string[] {
-  const prompt = [];
-  if (agent) {
-    prompt.push(`About you: ${agent.identity}`);
-    prompt.push(`Your goals for the conversation: ${agent.plan}`);
-  }
+  const lines: string[] = [];
+
+  if (agent) lines.push(...buildIdentityBlock(agent));
+
   if (otherAgent) {
-    prompt.push(`About ${otherPlayer.name}: ${otherAgent.identity}`);
+    const otherIdentity = otherAgent.industry || otherAgent.motivation
+      ? `${otherAgent.industry ?? 'unknown industry'} company`
+      : otherAgent.identity;
+    lines.push(`About ${otherPlayer.name}: ${otherIdentity}`);
   }
-  return prompt;
+
+  if (worldContext?.currentArticleSummary) {
+    lines.push('', 'WORLD CONTEXT:');
+    lines.push(`  Current news: ${worldContext.currentArticleSummary}`);
+    for (const s of worldContext.publicStatements) {
+      lines.push(`  ${s.agentName}: "${s.statement}"`);
+    }
+  }
+
+  if (memories?.length) {
+    lines.push('', 'MEMORIES (top 3 by relevance):');
+    for (const m of memories.slice(0, 3)) lines.push(`  ${m.description}`);
+  }
+
+  return lines;
 }
 
 function previousConversationPrompt(
@@ -211,17 +261,6 @@ function previousConversationPrompt(
         otherPlayer.name
       } it was ${prev.toLocaleString()}. It's now ${now.toLocaleString()}.`,
     );
-  }
-  return prompt;
-}
-
-function relatedMemoriesPrompt(memories: memory.Memory[]): string[] {
-  const prompt = [];
-  if (memories.length > 0) {
-    prompt.push(`Here are some related memories in decreasing relevance order:`);
-    for (const memory of memories) {
-      prompt.push(' - ' + memory.description);
-    }
   }
   return prompt;
 }
@@ -334,13 +373,35 @@ export const queryPromptData = internalQuery({
       player: { name: playerDescription.name, ...player },
       otherPlayer: { name: otherPlayerDescription.name, ...otherPlayer },
       conversation,
-      agent: { identity: agentDescription.identity, plan: agentDescription.plan, ...agent },
+      agent: {
+        identity: agentDescription.identity,
+        plan: agentDescription.plan,
+        industry: agentDescription.industry,
+        products: agentDescription.products,
+        competitors: agentDescription.competitors,
+        goals: agentDescription.goals,
+        motivation: agentDescription.motivation,
+        personality: agentDescription.personality,
+        articleRelevance: agentDescription.articleRelevance,
+        ...agent,
+      },
       otherAgent: otherAgent && {
         identity: otherAgentDescription!.identity,
         plan: otherAgentDescription!.plan,
+        industry: otherAgentDescription!.industry,
+        products: otherAgentDescription!.products,
+        competitors: otherAgentDescription!.competitors,
+        goals: otherAgentDescription!.goals,
+        motivation: otherAgentDescription!.motivation,
+        personality: otherAgentDescription!.personality,
+        articleRelevance: otherAgentDescription!.articleRelevance,
         ...otherAgent,
       },
       lastConversation,
+      worldContext: {
+        currentArticleSummary: world.currentArticleSummary,
+        publicStatements: world.publicStatements ?? [],
+      },
     };
   },
 });
