@@ -30,6 +30,27 @@ export default defineSchema({
     submittedAt: v.number(),
   }).index('byWorld', ['worldId']),
 
+  quizSessions: defineTable({
+    worldId: v.id('worlds'),
+    articleId: v.id('articles'),
+    difficulty: v.union(v.literal('easy'), v.literal('medium'), v.literal('hard')),
+    numQuestions: v.union(v.literal(3), v.literal(6), v.literal(10)),
+    includeAgentContext: v.boolean(),
+    questions: v.array(v.object({
+      id: v.string(),
+      scenario: v.string(),
+      options: v.array(v.object({ label: v.string(), text: v.string() })),
+      correctLabel: v.optional(v.string()),
+    })),
+    answers: v.array(v.object({
+      questionId: v.string(),
+      selectedLabel: v.string(),
+      submittedAt: v.number(),
+    })),
+    status: v.union(v.literal('active'), v.literal('completed')),
+    createdAt: v.number(),
+  }).index('byWorld', ['worldId']),
+
   ...agentTables,
   ...aiTownTables,
   ...engineTables,
