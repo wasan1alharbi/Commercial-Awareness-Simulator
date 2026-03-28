@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { internalAction, internalMutation, internalQuery } from '../_generated/server';
+import { action, internalAction, internalMutation, internalQuery } from '../_generated/server';
 import { internal } from '../_generated/api';
 import { gateAgentPrompt, generateIdentityPrompt } from './gateAgent';
 import { fetchWikipediaSummary } from './wikipedia';
@@ -102,7 +102,14 @@ export const spawnCompanyAgent = internalMutation({
   },
 });
 
-export const submitArticle = internalAction({
+export const getWorldById = internalQuery({
+  args: { worldId: v.id('worlds') },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.worldId);
+  },
+});
+
+export const submitArticleInternal = internalAction({
   args: {
     worldId: v.id('worlds'),
     rawText: v.string(),
