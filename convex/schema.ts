@@ -21,6 +21,15 @@ export default defineSchema({
     .index('conversationId', ['worldId', 'conversationId'])
     .index('messageUuid', ['conversationId', 'messageUuid']),
 
+  articles: defineTable({
+    worldId: v.id('worlds'),
+    rawText: v.string(),
+    summary: v.string(),
+    extractedCompanies: v.array(v.string()),
+    isValid: v.boolean(),
+    submittedAt: v.number(),
+  }).index('byWorld', ['worldId']),
+
   ...agentTables,
   ...aiTownTables,
   ...engineTables,
