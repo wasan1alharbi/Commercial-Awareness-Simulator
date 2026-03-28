@@ -12,6 +12,7 @@ export class AgentDescription {
   motivation?: string;
   personality?: string;
   articleRelevance?: string;
+  country?: string;
   lastAssessedAt?: number;
 
   constructor(serialized: SerializedAgentDescription) {
@@ -26,6 +27,7 @@ export class AgentDescription {
       motivation,
       personality,
       articleRelevance,
+      country,
       lastAssessedAt,
     } = serialized;
     this.agentId = parseGameId('agents', agentId);
@@ -38,6 +40,7 @@ export class AgentDescription {
     this.motivation = motivation;
     this.personality = personality;
     this.articleRelevance = articleRelevance;
+    this.country = country;
     this.lastAssessedAt = lastAssessedAt;
   }
 
@@ -53,6 +56,7 @@ export class AgentDescription {
       motivation,
       personality,
       articleRelevance,
+      country,
       lastAssessedAt,
     } = this;
     return {
@@ -66,6 +70,7 @@ export class AgentDescription {
       motivation,
       personality,
       articleRelevance,
+      country,
       lastAssessedAt,
     };
   }
@@ -82,6 +87,7 @@ export const serializedAgentDescription = {
   motivation: v.optional(v.string()),
   personality: v.optional(v.string()),
   articleRelevance: v.optional(v.string()),
+  country: v.optional(v.string()),
   lastAssessedAt: v.optional(v.number()),
 };
 export type SerializedAgentDescription = ObjectType<typeof serializedAgentDescription>;
