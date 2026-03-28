@@ -202,3 +202,31 @@ export const submitArticleInternal = internalAction({
     return { success: true, articleId, companies: result.companies, summary: result.summary };
   },
 });
+
+// Function to submit an article from the frontend
+export const submitArticle = action({
+  args: {
+    worldId: v.id('worlds'),
+    text: v.string(), // the actual news text
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; rejectionReason?: string; articleId?: string; companies?: string[]; summary?: string }> => {
+    // first make sure the world is actually in the db
+    const foundWorld = await ctx.runQuery(internal.simulator.index.getWorldById, { 
+      worldId: args.worldId 
+    });
+    
+    // Check if someone passed a fake world id
+    if (foundWorld === null) {
+      throw new Error("World " + args.worldId + " not found.");
+    }
+
+    // Pass data to the internal function
+    const result = await ctx.runAction(internal.simulator.index.submitArticleInternal, {
+      worldId: args.worldId,
+      rawText: args.text,
+    });
+
+    // console.log("Did it work?", result);
+    return result;
+  },
+});
