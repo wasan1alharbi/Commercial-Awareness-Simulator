@@ -6,12 +6,12 @@ export class AgentDescription {
   identity: string;
   plan: string;
   name?: string;
-  industry: string;
-  products: string[];
-  competitors: string[];
-  goals: string[];
-  motivation: string;
-  personality: string;
+  industry?: string;
+  products?: string[];
+  competitors?: string[];
+  goals?: string[];
+  motivation?: string;
+  personality?: string;
   articleRelevance?: string;
   country?: string;
   lastAssessedAt?: number;
@@ -86,12 +86,12 @@ export const serializedAgentDescription = {
   identity: v.string(),
   plan: v.string(),
   name: v.optional(v.string()),
-  industry: v.string(),
-  products: v.array(v.string()),
-  competitors: v.array(v.string()),
-  goals: v.array(v.string()),
-  motivation: v.string(),
-  personality: v.string(),
+  industry: v.optional(v.string()),
+  products: v.optional(v.array(v.string())),
+  competitors: v.optional(v.array(v.string())),
+  goals: v.optional(v.array(v.string())),
+  motivation: v.optional(v.string()),
+  personality: v.optional(v.string()),
   articleRelevance: v.optional(v.string()),
   country: v.optional(v.string()),
   lastAssessedAt: v.optional(v.number()),
