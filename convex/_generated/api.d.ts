@@ -37,6 +37,7 @@ import type * as http from "../http.js";
 import type * as init from "../init.js";
 import type * as messages from "../messages.js";
 import type * as music from "../music.js";
+import type * as simulator_agentWorldContext from "../simulator/agentWorldContext.js";
 import type * as simulator_gateAgent from "../simulator/gateAgent.js";
 import type * as simulator_index from "../simulator/index.js";
 import type * as simulator_wikipedia from "../simulator/wikipedia.js";
@@ -91,6 +92,7 @@ declare const fullApi: ApiFromModules<{
   init: typeof init;
   messages: typeof messages;
   music: typeof music;
+  "simulator/agentWorldContext": typeof simulator_agentWorldContext;
   "simulator/gateAgent": typeof simulator_gateAgent;
   "simulator/index": typeof simulator_index;
   "simulator/wikipedia": typeof simulator_wikipedia;
