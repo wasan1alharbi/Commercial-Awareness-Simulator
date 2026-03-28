@@ -1,9 +1,7 @@
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
-import { DatabaseReader, MutationCtx, mutation } from './_generated/server';
-import { Descriptions } from '../data/characters';
+import { MutationCtx, mutation } from './_generated/server';
 import * as map from '../data/gentle';
-import { insertInput } from './aiTown/insertInput';
 import { Id } from './_generated/dataModel';
 import { createEngine } from './aiTown/main';
 import { ENGINE_ACTION_DURATION } from './constants';
@@ -22,19 +20,7 @@ const init = mutation({
       );
       return;
     }
-    const shouldCreate = await shouldCreateAgents(
-      ctx.db,
-      worldStatus.worldId,
-      worldStatus.engineId,
-    );
-    if (shouldCreate) {
-      const toCreate = args.numAgents !== undefined ? args.numAgents : Descriptions.length;
-      for (let i = 0; i < toCreate; i++) {
-        await insertInput(ctx, worldStatus.worldId, 'createAgent', {
-          descriptionIndex: i % Descriptions.length,
-        });
-      }
-    }
+    // World starts empty --> agents are spawned dynamically <-- articles are submitted
   },
 });
 export default init;
@@ -86,29 +72,4 @@ async function getOrCreateDefaultWorld(ctx: MutationCtx) {
     maxDuration: ENGINE_ACTION_DURATION,
   });
   return { worldStatus, engine };
-}
-
-async function shouldCreateAgents(
-  db: DatabaseReader,
-  worldId: Id<'worlds'>,
-  engineId: Id<'engines'>,
-) {
-  const world = await db.get(worldId);
-  if (!world) {
-    throw new Error(`Invalid world ID: ${worldId}`);
-  }
-  if (world.agents.length > 0) {
-    return false;
-  }
-  const unactionedJoinInputs = await db
-    .query('inputs')
-    .withIndex('byInputNumber', (q) => q.eq('engineId', engineId))
-    .order('asc')
-    .filter((q) => q.eq(q.field('name'), 'createAgent'))
-    .filter((q) => q.eq(q.field('returnValue'), undefined))
-    .first();
-  if (unactionedJoinInputs) {
-    return false;
-  }
-  return true;
 }
