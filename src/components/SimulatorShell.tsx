@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Game from './Game.tsx';
+import ArticleInputPanel from './ArticleInputPanel.tsx';
 import FreezeButton from './FreezeButton.tsx';
 import MusicButton from './buttons/MusicButton.tsx';
 import Button from './buttons/Button.tsx';
@@ -71,20 +72,7 @@ export default function SimulatorShell() {
       {activeTab === 'simulation' && (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
 
-          <div className="flex items-center gap-3 px-6 py-6 bg-brown-800 border-b-4 border-brown-900">
-            <input
-              type="text"
-              placeholder="Paste a business news article here..."
-              className="flex-1 px-4 py-4 bg-brown-700 text-white border-2 border-brown-600 rounded font-body text-lg placeholder-brown-400 focus:outline-none focus:border-yellow-400"
-              disabled
-            />
-            <button
-              className="px-8 py-4 bg-clay-700 text-white font-display text-lg border-2 border-brown-600 opacity-50 cursor-not-allowed"
-              disabled
-            >
-              Submit
-            </button>
-          </div>
+          <ArticleInputPanel />
 
           <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
