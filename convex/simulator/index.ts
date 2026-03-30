@@ -207,26 +207,93 @@ export const submitArticleInternal = internalAction({
 export const submitArticle = action({
   args: {
     worldId: v.id('worlds'),
-    text: v.string(), // the actual news text
+    text: v.string(),
   },
   handler: async (ctx, args): Promise<{ success: boolean; rejectionReason?: string; articleId?: string; companies?: string[]; summary?: string }> => {
-    // first make sure the world is actually in the db
-    const foundWorld = await ctx.runQuery(internal.simulator.index.getWorldById, { 
-      worldId: args.worldId 
+    const foundWorld = await ctx.runQuery(internal.simulator.index.getWorldById, {
+      worldId: args.worldId,
     });
-    
-    // Check if someone passed a fake world id
+
     if (foundWorld === null) {
-      throw new Error("World " + args.worldId + " not found.");
+      throw new Error('World ' + args.worldId + ' not found.');
     }
 
-    // Pass data to the internal function
-    const result = await ctx.runAction(internal.simulator.index.submitArticleInternal, {
+    if (args.text.length < 50) {
+      return { success: false, rejectionReason: 'Article text must be at least 50 characters.' };
+    }
+
+    const result = await gateAgentPrompt(args.text);
+
+    if (!result.isValid) {
+      return { success: false, rejectionReason: result.rejectionReason ?? 'Not valid business news.' };
+    }
+
+    const articleId = await ctx.runMutation(internal.simulator.index.insertArticle, {
       worldId: args.worldId,
       rawText: args.text,
+      summary: result.summary,
+      extractedCompanies: result.companies,
     });
 
-    // console.log("Did it work?", result);
-    return result;
+    await ctx.runMutation(internal.simulator.index.patchWorldSummary, {
+      worldId: args.worldId,
+      summary: result.summary,
+    });
+
+    for (let i = 0; i < result.companies.length; i++) {
+      const compName = result.companies[i];
+
+      const existingAgent = await ctx.runQuery(internal.simulator.index.findExistingCompanyAgent, {
+        worldId: args.worldId,
+        companyName: compName,
+      });
+
+      if (!existingAgent) {
+        let wikiText = '';
+        try {
+          wikiText = await fetchWikipediaSummary(compName);
+        } catch (e) {
+          console.error('Wikipedia fetch failed for', compName, e);
+          wikiText = 'No information available.';
+        }
+
+        const newIdentity = await generateIdentityPrompt(compName, wikiText, result.summary);
+
+        const totalAgents = await ctx.runQuery(internal.simulator.index.getAgentCount, {
+          worldId: args.worldId,
+        });
+        const charName = characters[totalAgents % characters.length].name;
+
+        let idString = 'You are ' + compName + '. You are in the ' + newIdentity.industry + ' industry. \n';
+        idString += 'Your products are: ' + newIdentity.products.join(', ') + '. \n';
+        idString += 'Your rivals: ' + newIdentity.competitors.join(', ') + '. \n';
+        idString += 'Motivation: ' + newIdentity.motivation + ' \n';
+        idString += 'Personality: ' + newIdentity.personality;
+
+        await ctx.runMutation(internal.simulator.index.spawnCompanyAgent, {
+          worldId: args.worldId,
+          name: compName,
+          character: charName,
+          identity: idString,
+          plan: newIdentity.goals.join(' | '),
+          industry: newIdentity.industry,
+          products: newIdentity.products,
+          competitors: newIdentity.competitors,
+          goals: newIdentity.goals,
+          motivation: newIdentity.motivation,
+          personality: newIdentity.personality,
+          articleRelevance: newIdentity.articleRelevance,
+          country: newIdentity.country || 'Unknown',
+        });
+      } else {
+        const updateText = 'This breaking news directly impacts ' + compName + "'s current market strategy.";
+        await ctx.runMutation(internal.simulator.index.patchAgentRelevance, {
+          agentDescId: existingAgent.agentDescId,
+          articleRelevance: updateText,
+        });
+      }
+    }
+
+    return { success: true, articleId, companies: result.companies, summary: result.summary };
   },
 });
