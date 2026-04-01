@@ -6,6 +6,10 @@ import { fetchWikipediaSummary } from './wikipedia';
 import { characters } from '../../data/characters';
 import { insertInput } from '../aiTown/insertInput';
 
+function normalizeArticleText(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 export const insertArticle = internalMutation({
   args: {
     worldId: v.id('worlds'),
@@ -109,6 +113,26 @@ export const getWorldById = internalQuery({
   },
 });
 
+export const hasSameArticleTextAlready = internalQuery({
+  args: {
+    worldId: v.id('worlds'),
+    text: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const want = normalizeArticleText(args.text);
+    const rows = await ctx.db
+      .query('articles')
+      .withIndex('byWorld', (q) => q.eq('worldId', args.worldId))
+      .collect();
+    for (let i = 0; i < rows.length; i++) {
+      if (normalizeArticleText(rows[i].rawText) === want) {
+        return true;
+      }
+    }
+    return false;
+  },
+});
+
 export const submitArticle = action({
   args: {
     worldId: v.id('worlds'),
@@ -136,6 +160,14 @@ export const submitArticle = action({
 
     if (args.text.length < 50) {
       return { success: false, rejectionReason: 'Article text must be at least 50 characters.' };
+    }
+
+    const alreadyHaveThis = await ctx.runQuery(internal.simulator.index.hasSameArticleTextAlready, {
+      worldId: args.worldId,
+      text: args.text,
+    });
+    if (alreadyHaveThis) {
+      return { success: false, rejectionReason: 'You already submitted this article.' };
     }
 
     const result = await gateAgentPrompt(args.text);
