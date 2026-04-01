@@ -89,6 +89,9 @@ export default function SimulatorShell() {
                 <button onClick={showHistoryTab} className={sidebarTab === 'history' ? sidebarTabActiveStyle : sidebarTabStyle}>
                   History
                 </button>
+                <button onClick={() => setSidebarTab('chats')} className={sidebarTab === 'chats' ? sidebarTabActiveStyle : sidebarTabStyle}>
+                  Private Company Chats
+                </button>
               </div>
 
               <div style={{ flex: 1, overflowY: 'auto' }} className="p-4">
@@ -100,6 +103,11 @@ export default function SimulatorShell() {
                 {sidebarTab === 'history' && (
                   <p className="text-brown-400 text-sm text-center mt-8">
                     Past conversations will appear here.
+                  </p>
+                )}
+                {sidebarTab === 'chats' && (
+                  <p className="text-brown-400 text-sm text-center mt-8">
+                    Private company chats will appear here.
                   </p>
                 )}
               </div>
