@@ -103,12 +103,18 @@ export default function ArticleInputPanel() {
       {successSummary !== '' && (
         <div className="flex flex-col gap-2">
           <div className="font-body text-sm text-green-400 bg-green-900 border border-green-600 rounded px-4 py-2">
-            <div className="font-bold mb-1">Article accepted</div>
+            <div className="font-bold mb-1">
+              {newSpawns.length > 0
+                ? 'Article accepted'
+                : alreadyHadAgents.length > 0
+                  ? 'Saved — no new agents'
+                  : 'Article accepted'}
+            </div>
             <div>{successSummary}</div>
           </div>
           {newSpawns.length > 0 && (
             <div className="font-body text-sm text-brown-200 bg-brown-700 border border-brown-600 rounded px-4 py-2">
-              <div className="font-bold mb-1 text-yellow-400">New agents added for this run:</div>
+              <div className="font-bold mb-1 text-yellow-400">New agents:</div>
               <div className="flex flex-wrap gap-2">
                 {newSpawns.map((company) => (
                   <span key={'new-' + company} className="px-2 py-1 bg-brown-600 border border-brown-500 rounded text-white">
@@ -120,7 +126,7 @@ export default function ArticleInputPanel() {
           )}
           {alreadyHadAgents.length > 0 && (
             <div className="font-body text-sm text-brown-200 bg-brown-700 border border-brown-600 rounded px-4 py-2">
-              <div className="font-bold mb-1 text-yellow-400">Already in the world (we only updated their stance):</div>
+              <div className="font-bold mb-1 text-yellow-400">These companies were already in the sim:</div>
               <div className="flex flex-wrap gap-2">
                 {alreadyHadAgents.map((company) => (
                   <span key={'old-' + company} className="px-2 py-1 bg-brown-600 border border-brown-500 rounded text-white">

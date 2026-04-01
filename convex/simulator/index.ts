@@ -6,8 +6,64 @@ import { fetchWikipediaSummary } from './wikipedia';
 import { characters } from '../../data/characters';
 import { insertInput } from '../aiTown/insertInput';
 
+const COSINE_DUPLICATE_CUTOFF = 0.92;
+
 function normalizeArticleText(text: string): string {
   return text.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function countWords(text: string): number {
+  const w = text.match(/[a-z0-9]+/g);
+  return w ? w.length : 0;
+}
+
+function wordCountsForCosine(text: string): Map<string, number> {
+  const words = text.match(/[a-z0-9]+/g);
+  const counts = new Map<string, number>();
+  if (!words) {
+    return counts;
+  }
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    counts.set(word, (counts.get(word) || 0) + 1);
+  }
+  return counts;
+}
+
+function cosineSimilarityOfWordBags(left: string, right: string): number {
+  const ca = wordCountsForCosine(left);
+  const cb = wordCountsForCosine(right);
+  let sumLeft = 0;
+  let sumRight = 0;
+  for (const [, n] of ca) {
+    sumLeft += n * n;
+  }
+  for (const [, n] of cb) {
+    sumRight += n * n;
+  }
+  if (sumLeft === 0 || sumRight === 0) {
+    return 0;
+  }
+  let dot = 0;
+  for (const [word, nLeft] of ca) {
+    const nRight = cb.get(word);
+    if (nRight !== undefined) {
+      dot += nLeft * nRight;
+    }
+  }
+  return dot / (Math.sqrt(sumLeft) * Math.sqrt(sumRight));
+}
+
+function isSameArticleForDuplicateCheck(a: string, b: string): boolean {
+  const one = normalizeArticleText(a);
+  const two = normalizeArticleText(b);
+  if (one === two) {
+    return true;
+  }
+  if (countWords(one) < 15 || countWords(two) < 15) {
+    return false;
+  }
+  return cosineSimilarityOfWordBags(one, two) >= COSINE_DUPLICATE_CUTOFF;
 }
 
 export const insertArticle = internalMutation({
@@ -119,13 +175,12 @@ export const hasSameArticleTextAlready = internalQuery({
     text: v.string(),
   },
   handler: async (ctx, args) => {
-    const want = normalizeArticleText(args.text);
     const rows = await ctx.db
       .query('articles')
       .withIndex('byWorld', (q) => q.eq('worldId', args.worldId))
       .collect();
     for (let i = 0; i < rows.length; i++) {
-      if (normalizeArticleText(rows[i].rawText) === want) {
+      if (isSameArticleForDuplicateCheck(args.text, rows[i].rawText)) {
         return true;
       }
     }
