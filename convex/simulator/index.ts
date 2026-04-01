@@ -114,7 +114,18 @@ export const submitArticle = action({
     worldId: v.id('worlds'),
     text: v.string(),
   },
-  handler: async (ctx, args): Promise<{ success: boolean; rejectionReason?: string; articleId?: string; companies?: string[]; summary?: string }> => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    success: boolean;
+    rejectionReason?: string;
+    articleId?: string;
+    companies?: string[];
+    summary?: string;
+    newSpawns?: string[];
+    alreadyHadAgents?: string[];
+  }> => {
     const foundWorld = await ctx.runQuery(internal.simulator.index.getWorldById, {
       worldId: args.worldId,
     });
@@ -144,6 +155,9 @@ export const submitArticle = action({
       worldId: args.worldId,
       summary: result.summary,
     });
+
+    const newSpawns: string[] = [];
+    const alreadyHadAgents: string[] = [];
 
     for (let i = 0; i < result.companies.length; i++) {
       const compName = result.companies[i];
@@ -190,15 +204,24 @@ export const submitArticle = action({
           articleRelevance: newIdentity.articleRelevance,
           country: newIdentity.country || 'Unknown',
         });
+        newSpawns.push(compName);
       } else {
         const updateText = 'This breaking news directly impacts ' + compName + "'s current market strategy.";
         await ctx.runMutation(internal.simulator.index.patchAgentRelevance, {
           agentDescId: existingAgent.agentDescId,
           articleRelevance: updateText,
         });
+        alreadyHadAgents.push(compName);
       }
     }
 
-    return { success: true, articleId, companies: result.companies, summary: result.summary };
+    return {
+      success: true,
+      articleId,
+      companies: result.companies,
+      summary: result.summary,
+      newSpawns,
+      alreadyHadAgents,
+    };
   },
 });
