@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { action, internalAction, internalMutation, internalQuery } from '../_generated/server';
+import { action, internalMutation, internalQuery } from '../_generated/server';
 import { internal } from '../_generated/api';
 import { gateAgentPrompt, generateIdentityPrompt } from './gateAgent';
 import { fetchWikipediaSummary } from './wikipedia';
@@ -109,101 +109,6 @@ export const getWorldById = internalQuery({
   },
 });
 
-export const submitArticleInternal = internalAction({
-  args: {
-    worldId: v.id('worlds'),
-    rawText: v.string(),
-  },
-  handler: async (ctx, args): Promise<{ success: boolean; rejectionReason?: string; articleId?: string; companies?: string[]; summary?: string }> => {
-    if (args.rawText.length < 50) {
-      return { success: false, rejectionReason: 'Article text must be at least 50 characters.' };
-    }
-
-    const result = await gateAgentPrompt(args.rawText);
-
-    if (!result.isValid) {
-      return { success: false, rejectionReason: result.rejectionReason ?? 'Not valid business news.' };
-    }
-
-    const articleId = await ctx.runMutation(internal.simulator.index.insertArticle, {
-      worldId: args.worldId,
-      rawText: args.rawText,
-      summary: result.summary,
-      extractedCompanies: result.companies,
-    });
-
-    await ctx.runMutation(internal.simulator.index.patchWorldSummary, {
-      worldId: args.worldId,
-      summary: result.summary,
-    });
-
-    for (let i = 0; i < result.companies.length; i++) {
-      const compName = result.companies[i];
-
-      let existingAgent = await ctx.runQuery(internal.simulator.index.findExistingCompanyAgent, {
-        worldId: args.worldId,
-        companyName: compName,
-      });
-
-      if (!existingAgent) {
-        let wikiText = '';
-        try {
-          // Fetch Wikipedia summary for the company to help the AI build a more complete identity. If this fails for any reason, we just proceed with an empty string and let the AI deal with it.
-          wikiText = await fetchWikipediaSummary(compName);
-        } catch (e) {
-          console.error('Wikipedia fetch failed for', compName, e);
-          wikiText = 'No information available.';
-        }
-
-        const newIdentity = await generateIdentityPrompt(compName, wikiText, result.summary);
-
-        // which character avatar to assign
-        const totalAgents = await ctx.runQuery(internal.simulator.index.getAgentCount, {
-          worldId: args.worldId,
-        });
-        // TODO: make sure characters array is never empty
-        const charName = characters[totalAgents % characters.length].name;
-
-        // Build the system prompt
-        let idString = 'You are ' + compName + '. You are in the ' + newIdentity.industry + ' industry. \n';
-        idString += 'Your products are: ' + newIdentity.products.join(', ') + '. \n';
-        idString += 'Your rivals: ' + newIdentity.competitors.join(', ') + '. \n';
-        idString += 'Motivation: ' + newIdentity.motivation + ' \n';
-        idString += 'Personality: ' + newIdentity.personality;
-
-        // Push new agent to the database
-        await ctx.runMutation(internal.simulator.index.spawnCompanyAgent, {
-          worldId: args.worldId,
-          name: compName,
-          character: charName,
-          identity: idString,
-          plan: newIdentity.goals.join(' | '),
-          industry: newIdentity.industry,
-          products: newIdentity.products,
-          competitors: newIdentity.competitors,
-          goals: newIdentity.goals,
-          motivation: newIdentity.motivation,
-          personality: newIdentity.personality,
-          articleRelevance: newIdentity.articleRelevance,
-          country: newIdentity.country || 'Unknown', // Added fallback just in case
-        });
-      } else {
-        // Agent already exists, just update how relevant this news is to them
-        // NOTE: put a prompt for the AI to generate a real reason here
-        // Hardcoding for now just to get the simulation running.
-        const updateText = `This breaking news directly impacts ${compName}'s current market strategy.`;
-        await ctx.runMutation(internal.simulator.index.patchAgentRelevance, {
-          agentDescId: existingAgent.agentDescId,
-          articleRelevance: updateText,
-        });
-      }
-    }
-
-    return { success: true, articleId, companies: result.companies, summary: result.summary };
-  },
-});
-
-// Function to submit an article from the frontend
 export const submitArticle = action({
   args: {
     worldId: v.id('worlds'),
