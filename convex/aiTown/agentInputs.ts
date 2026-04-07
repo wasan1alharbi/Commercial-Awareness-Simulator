@@ -165,4 +165,13 @@ export const agentInputs = {
       return { agentId };
     },
   }),
+  updateWorldContext: inputHandler({
+    args: {
+      summary: v.string(),
+    },
+    handler: (game, now, args) => {
+      game.world.currentArticleSummary = args.summary;
+      return null;
+    },
+  }),
 };

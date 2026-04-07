@@ -188,6 +188,18 @@ export const hasSameArticleTextAlready = internalQuery({
   },
 });
 
+export const updateWorldContextViaInput = internalMutation({
+  args: {
+    worldId: v.id('worlds'),
+    summary: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await insertInput(ctx, args.worldId, 'updateWorldContext', {
+      summary: args.summary,
+    });
+  },
+});
+
 export const submitArticle = action({
   args: {
     worldId: v.id('worlds'),
@@ -239,6 +251,11 @@ export const submitArticle = action({
     });
 
     await ctx.runMutation(internal.simulator.index.patchWorldSummary, {
+      worldId: args.worldId,
+      summary: result.summary,
+    });
+
+    await ctx.runMutation(internal.simulator.index.updateWorldContextViaInput, {
       worldId: args.worldId,
       summary: result.summary,
     });
