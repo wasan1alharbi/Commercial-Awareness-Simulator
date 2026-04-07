@@ -174,4 +174,47 @@ export const agentInputs = {
       return null;
     },
   }),
+  updatePublicStatement: inputHandler({
+    args: {
+      agentName: v.string(),
+      statement: v.string(),
+    },
+    handler: (game, now, args) => {
+      const existing = game.world.publicStatements;
+      let found = false;
+      for (let i = 0; i < existing.length; i++) {
+        if (existing[i].agentName === args.agentName) {
+          existing[i] = { agentName: args.agentName, statement: args.statement, createdAt: now };
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        existing.push({ agentName: args.agentName, statement: args.statement, createdAt: now });
+      }
+      return null;
+    },
+  }),
+  finishProcessWorldContext: inputHandler({
+    args: {
+      operationId: v.string(),
+      agentId: agentId,
+    },
+    handler: (game, now, args) => {
+      const agentId = parseGameId('agents', args.agentId);
+      const agent = game.world.agents.get(agentId);
+      if (!agent) {
+        throw new Error('Agent not found: ' + agentId);
+      }
+      if (
+        !agent.inProgressOperation ||
+        agent.inProgressOperation.operationId !== args.operationId
+      ) {
+        console.debug('Agent ' + agentId + ' not processing world context ' + args.operationId);
+        return null;
+      }
+      delete agent.inProgressOperation;
+      return null;
+    },
+  }),
 };

@@ -1,6 +1,6 @@
 import { v } from 'convex/values';
 import { internalAction, internalMutation, internalQuery } from '../_generated/server';
-import { internal } from '../_generated/api';
+import { internal, api } from '../_generated/api';
 import { chatCompletion, fetchEmbedding } from '../util/llm';
 
 export type WorldContextAction = {
@@ -138,7 +138,7 @@ export const agentProcessWorldContext = internalAction({
     statement: v.optional(v.string()),
     reflection: v.optional(v.string()),
   }),
-  handler: async (ctx, { agentId, worldId }): Promise<WorldContextAction> => {
+  handler: async (ctx, { agentId, worldId, operationId }): Promise<WorldContextAction> => {
     // get the agent's identity info
     const agentDesc = await ctx.runQuery(
       internal.simulator.agentWorldContext.getAgentDescriptionByAgentId,
@@ -194,26 +194,61 @@ export const agentProcessWorldContext = internalAction({
     systemPrompt += `{ "action": "seekAgent" | "makeStatement" | "reflect", "targetAgentName": string | null, "statement": string | null, "reflection": string | null }`;
 
     let lastError: any;
+    let result: WorldContextAction | undefined;
 
     try {
-      return await callLLMForWorldContext(systemPrompt);
+      result = await callLLMForWorldContext(systemPrompt);
     } catch (err) {
       lastError = err;
     }
 
-    try {
-      return await callLLMForWorldContext(systemPrompt);
-    } catch (err) {
-      lastError = err;
+    if (!result) {
+      try {
+        result = await callLLMForWorldContext(systemPrompt);
+      } catch (err) {
+        lastError = err;
+      }
     }
 
-    try {
-      return await callLLMForWorldContext(systemPrompt);
-    } catch (err) {
-      lastError = err;
+    if (!result) {
+      try {
+        result = await callLLMForWorldContext(systemPrompt);
+      } catch (err) {
+        lastError = err;
+      }
     }
 
-    throw lastError;
+    if (!result) {
+      // Clear the operation even on failure so the agent isn't stuck
+      await ctx.runMutation(api.aiTown.main.sendInput, {
+        worldId,
+        name: 'finishProcessWorldContext',
+        args: { operationId, agentId },
+      });
+      throw lastError;
+    }
+
+    // Handle the action result
+    await ctx.runAction(internal.simulator.agentWorldContext.handleWorldContextAction, {
+      worldId,
+      agentId,
+      agentDescriptionId: agentDesc._id,
+      result: {
+        action: result.action,
+        targetAgentName: result.targetAgentName,
+        statement: result.statement,
+        reflection: result.reflection,
+      },
+    });
+
+    // Clear the in-progress operation via engine input
+    await ctx.runMutation(api.aiTown.main.sendInput, {
+      worldId,
+      name: 'finishProcessWorldContext',
+      args: { operationId, agentId },
+    });
+
+    return result;
   },
 });
 
@@ -247,10 +282,13 @@ export const handleWorldContextAction = internalAction({
       if (args.result.statement !== undefined) {
         statementText = args.result.statement;
       }
-      await ctx.runMutation(internal.simulator.agentWorldContext.updatePublicStatement, {
+      await ctx.runMutation(api.aiTown.main.sendInput, {
         worldId: args.worldId,
-        agentName: agentName,
-        statement: statementText,
+        name: 'updatePublicStatement',
+        args: {
+          agentName: agentName,
+          statement: statementText,
+        },
       });
       return {};
     } else if (args.result.action === 'reflect') {

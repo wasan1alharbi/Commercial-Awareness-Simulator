@@ -77,24 +77,6 @@ export class Agent {
     // If we aren't doing an activity or moving, do something.
     // If we have been wandering but haven't thought about something to do for
     // a while, do something.
-    if (!conversation && !doingActivity && (!player.pathfinding || !recentlyAttemptedInvite)) {
-      const agentDescription = game.agentDescriptions.get(this.id);
-      const goals = agentDescription?.goals ?? [];
-      this.startOperation(game, now, 'agentDoSomething', {
-        worldId: game.worldId,
-        player: player.serialize(),
-        otherFreePlayers: [...game.world.players.values()]
-          .filter((p) => p.id !== player.id)
-          .filter(
-            (p) => ![...game.world.conversations.values()].find((c) => c.participants.has(p.id)),
-          )
-          .map((p) => p.serialize()),
-        agent: this.serialize(),
-        map: game.worldMap.serialize(),
-        goals,
-      });
-      return;
-    }
     // Check to see if we have a conversation we need to remember.
     if (this.toRemember) {
       // Fire off the action to remember the conversation.
@@ -115,6 +97,24 @@ export class Agent {
       this.startOperation(game, now, 'agentProcessWorldContext', {
         worldId: game.worldId,
         agentId: this.id,
+      });
+      return;
+    }
+    if (!conversation && !doingActivity && (!player.pathfinding || !recentlyAttemptedInvite)) {
+      const agentDescription = game.agentDescriptions.get(this.id);
+      const goals = agentDescription?.goals ?? [];
+      this.startOperation(game, now, 'agentDoSomething', {
+        worldId: game.worldId,
+        player: player.serialize(),
+        otherFreePlayers: [...game.world.players.values()]
+          .filter((p) => p.id !== player.id)
+          .filter(
+            (p) => ![...game.world.conversations.values()].find((c) => c.participants.has(p.id)),
+          )
+          .map((p) => p.serialize()),
+        agent: this.serialize(),
+        map: game.worldMap.serialize(),
+        goals,
       });
       return;
     }
