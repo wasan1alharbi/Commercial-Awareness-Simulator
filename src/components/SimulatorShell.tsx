@@ -11,7 +11,7 @@ import helpImg from '../../assets/help.svg';
 import { MAX_HUMAN_PLAYERS } from '../../convex/constants.ts';
 import { GameId } from '../../convex/aiTown/ids.ts';
 import { api } from '../../convex/_generated/api';
-import { useServerGame } from '../hooks/serverGame.ts';
+import { ServerGame, useServerGame } from '../hooks/serverGame.ts';
 import PlayerDetails from './PlayerDetails.tsx';
 
 export default function SimulatorShell() {
@@ -126,9 +126,7 @@ export default function SimulatorShell() {
                 ) : (
                   <>
                     {sidebarTab === 'live' && (
-                      <p className="text-brown-400 text-sm text-center mt-8">
-                        Live agent interactions will appear here once an article is submitted.
-                      </p>
+                      <LiveTab game={game} />
                     )}
                     {sidebarTab === 'history' && (
                       <p className="text-brown-400 text-sm text-center mt-8">
@@ -173,6 +171,58 @@ export default function SimulatorShell() {
         </div>
       </footer>
 
+    </div>
+  );
+}
+
+function LiveTab({ game }: { game: ServerGame | undefined }) {
+  if (!game) {
+    return (
+      <p className="text-brown-400 text-sm text-center mt-8">
+        Loading world data...
+      </p>
+    );
+  }
+
+  const articleSummary = game.world.currentArticleSummary;
+  const publicStatements = game.world.publicStatements;
+
+  if (!articleSummary) {
+    return (
+      <p className="text-brown-400 text-sm text-center mt-8">
+        Submit a business article above to see the live broadcast and agent reactions here.
+      </p>
+    );
+  }
+
+  const sortedStatements = [...publicStatements].sort((a, b) => b.createdAt - a.createdAt);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="bg-brown-700 rounded px-3 py-3 border-l-4 border-yellow-400">
+        <span className="font-display text-xs text-yellow-400 uppercase tracking-wide">Broadcast</span>
+        <p className="text-brown-100 text-sm mt-1">{articleSummary}</p>
+      </div>
+
+      {sortedStatements.length > 0 && (
+        <div>
+          <span className="font-display text-xs text-brown-400 uppercase tracking-wide">Agent Reactions</span>
+          <ul className="flex flex-col gap-2 mt-2">
+            {sortedStatements.map((stmt, i) => (
+              <li key={`${stmt.agentName}-${i}`} className="bg-brown-700 rounded px-3 py-2 text-sm">
+                <span className="text-yellow-300 font-display text-xs">{stmt.agentName}</span>
+                <p className="text-brown-100 mt-1">{stmt.statement}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {sortedStatements.length === 0 && (
+        <p className="text-brown-400 text-sm text-center">
+          Agents are processing the article... reactions will appear shortly.
+        </p>
+      )}
     </div>
   );
 }
