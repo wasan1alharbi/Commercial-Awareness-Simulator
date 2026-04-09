@@ -51,6 +51,14 @@ export default defineSchema({
     createdAt: v.number(),
   }).index('byWorld', ['worldId']),
 
+  askChats: defineTable({
+    worldId: v.id('worlds'),
+    question: v.string(),
+    answer: v.optional(v.string()),
+    context: v.string(),
+    createdAt: v.number(),
+  }).index('byWorld', ['worldId']),
+
   kpiSnapshots: defineTable({
     sessionId: v.id('quizSessions'),
     profit: v.number(),
