@@ -14,6 +14,7 @@ import { api } from '../../convex/_generated/api';
 import { ServerGame, useServerGame } from '../hooks/serverGame.ts';
 import PlayerDetails from './PlayerDetails.tsx';
 import { Id } from '../../convex/_generated/dataModel';
+import { Messages } from './Messages';
 
 export default function SimulatorShell() {
   const [activeTab, setActiveTab] = useState('simulation');
@@ -148,9 +149,12 @@ export default function SimulatorShell() {
                         Loading...
                       </p>
                     )}
-                    {sidebarTab === 'chats' && (
+                    {sidebarTab === 'chats' && worldId && (
+                      <ChatsTab worldId={worldId} engineId={engineId} scrollViewRef={scrollViewRef} />
+                    )}
+                    {sidebarTab === 'chats' && !worldId && (
                       <p className="text-brown-400 text-sm text-center mt-8">
-                        Private company chats will appear here.
+                        Loading...
                       </p>
                     )}
                   </>
@@ -291,14 +295,6 @@ function HistoryTab({ worldId, onFollowUp }: { worldId: Id<'worlds'>; onFollowUp
     );
   }
 
-  if (chats.length === 0) {
-    return (
-      <p className="text-brown-400 text-sm text-center mt-8">
-        No questions asked yet. Use the input below to ask about agent interactions.
-      </p>
-    );
-  }
-
   const openChat = openChatId ? chats.find((c) => c._id === openChatId) : null;
 
   if (openChat) {
@@ -357,6 +353,14 @@ function HistoryTab({ worldId, onFollowUp }: { worldId: Id<'worlds'>; onFollowUp
     );
   }
 
+  if (chats.length === 0) {
+    return (
+      <p className="text-brown-400 text-sm text-center mt-8">
+        No questions asked yet. Use the input below to ask about agent interactions.
+      </p>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-2">
       {chats.map((chat) => {
@@ -376,6 +380,85 @@ function HistoryTab({ worldId, onFollowUp }: { worldId: Id<'worlds'>; onFollowUp
             {!chat.answer && (
               <p className="text-yellow-400 text-xs mt-1">Thinking...</p>
             )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ChatsTab({ worldId, engineId, scrollViewRef }: { worldId: Id<'worlds'>; engineId?: Id<'engines'>; scrollViewRef: React.RefObject<HTMLDivElement> }) {
+  const archivedConversations = useQuery(api.simulator.index.listArchivedConversations, { worldId });
+  const [openConversationId, setOpenConversationId] = useState<string | null>(null);
+
+  if (archivedConversations === undefined) {
+    return (
+      <p className="text-brown-400 text-sm text-center mt-8">
+        Loading...
+      </p>
+    );
+  }
+
+  const openConversation = openConversationId
+    ? archivedConversations.find((c) => c._id === openConversationId)
+    : null;
+
+  if (openConversation && engineId) {
+    const participantNames = openConversation.participants.map((p) => p.playerName).join(' ↔ ');
+    return (
+      <>
+        <div className="flex justify-between items-center mb-2">
+          <button
+            className="text-xs text-brown-400 hover:text-white"
+            onClick={() => setOpenConversationId(null)}
+          >
+            ← Back to list
+          </button>
+        </div>
+        <p className="text-yellow-300 font-display text-sm mb-2">{participantNames}</p>
+        <Messages
+          worldId={worldId}
+          engineId={engineId}
+          inConversationWithMe={false}
+          conversation={{ kind: 'archived', doc: openConversation }}
+          scrollViewRef={scrollViewRef}
+        />
+      </>
+    );
+  }
+
+  if (archivedConversations.length === 0) {
+    return (
+      <p className="text-brown-400 text-sm text-center mt-8">
+        No agent conversations yet. Agents will start chatting after you submit an article.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {archivedConversations.map((conv) => {
+        const participantNames = conv.participants.map((p) => p.playerName).join(' ↔ ');
+        const msAgo = Date.now() - conv.ended;
+        const minsAgo = Math.floor(msAgo / 60000);
+        let timeAgo = 'just now';
+        if (minsAgo >= 60) {
+          const hoursAgo = Math.floor(minsAgo / 60);
+          timeAgo = hoursAgo + (hoursAgo === 1 ? ' hour ago' : ' hours ago');
+        } else if (minsAgo > 0) {
+          timeAgo = minsAgo + (minsAgo === 1 ? ' min ago' : ' mins ago');
+        }
+        return (
+          <div
+            key={conv._id}
+            className="bg-brown-700 rounded px-3 py-2 cursor-pointer hover:bg-brown-600"
+            onClick={() => setOpenConversationId(conv._id)}
+          >
+            <div className="flex justify-between items-center">
+              <p className="text-brown-100 text-sm truncate flex-1 mr-2">{participantNames}</p>
+              <span className="text-xs text-brown-400 whitespace-nowrap">{timeAgo}</span>
+            </div>
+            <p className="text-brown-400 text-xs mt-1">{conv.numMessages} messages</p>
           </div>
         );
       })}

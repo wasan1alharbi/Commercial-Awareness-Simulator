@@ -415,3 +415,17 @@ export const answerAskQuestion = internalAction({
     });
   },
 });
+
+export const listArchivedConversations = query({
+  args: { worldId: v.id('worlds') },
+  handler: async (ctx, args) => {
+    const conversations = await ctx.db
+      .query('archivedConversations')
+      .withIndex('worldId', (q) => q.eq('worldId', args.worldId))
+      .collect();
+
+    const withMessages = conversations.filter((c) => c.numMessages > 0);
+    withMessages.sort((a, b) => b.ended - a.ended);
+    return withMessages;
+  },
+});
