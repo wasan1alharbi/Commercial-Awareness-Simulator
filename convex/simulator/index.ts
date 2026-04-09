@@ -407,7 +407,7 @@ export const answerAskQuestion = internalAction({
       temperature: 0.7,
     });
 
-    const answer = typeof content === 'string' ? content : await content.readAll();
+    const answer = content as string;
 
     await ctx.runMutation(internal.simulator.index.patchAskChatAnswer, {
       askChatId: args.askChatId,
