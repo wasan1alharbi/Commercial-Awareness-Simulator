@@ -346,6 +346,9 @@ export const submitAskQuestion = mutation({
       context: args.context,
       createdAt: Date.now(),
     });
+    await ctx.scheduler.runAfter(0, internal.simulator.index.answerAskQuestion, {
+      askChatId: docId,
+    });
     return docId;
   },
 });
