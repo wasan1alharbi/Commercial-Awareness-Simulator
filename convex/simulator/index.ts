@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { action, internalMutation, internalQuery } from '../_generated/server';
+import { action, mutation, internalMutation, internalQuery } from '../_generated/server';
 import { internal } from '../_generated/api';
 import { gateAgentPrompt, generateIdentityPrompt } from './gateAgent';
 import { fetchWikipediaSummary } from './wikipedia';
@@ -327,5 +327,24 @@ export const submitArticle = action({
       newSpawns,
       alreadyHadAgents,
     };
+  },
+});
+
+
+export const submitAskQuestion = mutation({
+  args: {
+    worldId: v.id('worlds'),
+    question: v.string(),
+    context: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const docId = await ctx.db.insert('askChats', {
+      worldId: args.worldId,
+      question: args.question,
+      answer: undefined,
+      context: args.context,
+      createdAt: Date.now(),
+    });
+    return docId;
   },
 });
