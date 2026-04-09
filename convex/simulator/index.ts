@@ -1,6 +1,7 @@
 import { v } from 'convex/values';
-import { action, mutation, internalMutation, internalQuery } from '../_generated/server';
+import { action, mutation, internalAction, internalMutation, internalQuery } from '../_generated/server';
 import { internal } from '../_generated/api';
+import { chatCompletion } from '../util/llm';
 import { gateAgentPrompt, generateIdentityPrompt } from './gateAgent';
 import { fetchWikipediaSummary } from './wikipedia';
 import { characters } from '../../data/characters';
@@ -346,5 +347,56 @@ export const submitAskQuestion = mutation({
       createdAt: Date.now(),
     });
     return docId;
+  },
+});
+
+
+export const getAskChat = internalQuery({
+  args: { askChatId: v.id('askChats') },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.askChatId);
+  },
+});
+
+export const patchAskChatAnswer = internalMutation({
+  args: {
+    askChatId: v.id('askChats'),
+    answer: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.askChatId, { answer: args.answer });
+  },
+});
+
+export const answerAskQuestion = internalAction({
+  args: { askChatId: v.id('askChats') },
+  handler: async (ctx, args) => {
+    const askChat = await ctx.runQuery(internal.simulator.index.getAskChat, {
+      askChatId: args.askChatId,
+    });
+
+    if (!askChat) {
+      throw new Error('askChat not found: ' + args.askChatId);
+    }
+
+    const systemPrompt =
+      'You are a helpful assistant. The user is looking at this context from a business simulation: ' +
+      askChat.context +
+      '. Answer their question concisely.';
+
+    const { content } = await chatCompletion({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: askChat.question },
+      ],
+      temperature: 0.7,
+    });
+
+    const answer = typeof content === 'string' ? content : await content.readAll();
+
+    await ctx.runMutation(internal.simulator.index.patchAskChatAnswer, {
+      askChatId: args.askChatId,
+      answer: answer,
+    });
   },
 });
