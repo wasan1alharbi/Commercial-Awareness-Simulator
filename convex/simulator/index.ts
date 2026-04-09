@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { action, mutation, internalAction, internalMutation, internalQuery } from '../_generated/server';
+import { action, query, mutation, internalAction, internalMutation, internalQuery } from '../_generated/server';
 import { internal } from '../_generated/api';
 import { chatCompletion } from '../util/llm';
 import { gateAgentPrompt, generateIdentityPrompt } from './gateAgent';
@@ -331,6 +331,18 @@ export const submitArticle = action({
   },
 });
 
+
+export const listAskChats = query({
+  args: { worldId: v.id('worlds') },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query('askChats')
+      .withIndex('byWorld', (q) => q.eq('worldId', args.worldId))
+      .collect();
+    rows.sort((a, b) => b.createdAt - a.createdAt);
+    return rows;
+  },
+});
 
 export const submitAskQuestion = mutation({
   args: {
