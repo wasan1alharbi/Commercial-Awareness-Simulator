@@ -19,6 +19,7 @@ export default function SimulatorShell() {
   const [sidebarTab, setSidebarTab] = useState('live');
   const [helpOpen, setHelpOpen] = useState(false);
   const [selectedElement, setSelectedElement] = useState<{ kind: 'player'; id: GameId<'players'> }>();
+  const [askQuestion, setAskQuestion] = useState('');
 
   function handleSelectElement(element?: { kind: 'player'; id: GameId<'players'> }) {
     setSelectedElement(element);
@@ -142,14 +143,23 @@ export default function SimulatorShell() {
                 )}
               </div>
 
-              <div className="p-3 border-t-4 border-brown-900">
+              <form
+                className="p-3 border-t-4 border-brown-900"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (askQuestion.trim() === '') return;
+                  console.log('Ask question:', askQuestion);
+                  setAskQuestion('');
+                }}
+              >
                 <input
                   type="text"
                   placeholder="Ask about past interactions..."
                   className="w-full px-3 py-2 bg-brown-700 text-white text-sm border-2 border-brown-600 rounded placeholder-brown-400 focus:outline-none focus:border-yellow-400"
-                  disabled
+                  value={askQuestion}
+                  onChange={(e) => setAskQuestion(e.target.value)}
                 />
-              </div>
+              </form>
 
             </div>
           </div>
