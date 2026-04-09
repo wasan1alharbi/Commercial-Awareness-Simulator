@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { useQuery } from 'convex/react';
+import { useConvex, useQuery } from 'convex/react';
 import Game from './Game.tsx';
 import ArticleInputPanel from './ArticleInputPanel.tsx';
 import FreezeButton from './FreezeButton.tsx';
@@ -20,6 +20,9 @@ export default function SimulatorShell() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [selectedElement, setSelectedElement] = useState<{ kind: 'player'; id: GameId<'players'> }>();
   const [askQuestion, setAskQuestion] = useState('');
+  const [askLoading, setAskLoading] = useState(false);
+
+  const convex = useConvex();
 
   function handleSelectElement(element?: { kind: 'player'; id: GameId<'players'> }) {
     setSelectedElement(element);
@@ -145,19 +148,44 @@ export default function SimulatorShell() {
 
               <form
                 className="p-3 border-t-4 border-brown-900"
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  if (askQuestion.trim() === '') return;
-                  console.log('Ask question:', askQuestion);
-                  setAskQuestion('');
+                  if (askQuestion.trim() === '' || !worldId || askLoading) return;
+
+                  let context = '';
+                  if (sidebarTab === 'live' && game) {
+                    const summary = game.world.currentArticleSummary || '';
+                    const statements = game.world.publicStatements || [];
+                    const stmtLines = statements.map(
+                      (s: { agentName: string; statement: string }) => s.agentName + ': ' + s.statement,
+                    );
+                    context = summary + '\n' + stmtLines.join('\n');
+                  } else {
+                    context = 'User was browsing the sidebar.';
+                  }
+
+                  setAskLoading(true);
+                  try {
+                    await convex.mutation('simulator/index:submitAskQuestion' as any, {
+                      worldId,
+                      question: askQuestion.trim(),
+                      context: context.trim(),
+                    });
+                    setAskQuestion('');
+                    setSidebarTab('history');
+                  } catch (err) {
+                    console.error('Failed to submit question:', err);
+                  }
+                  setAskLoading(false);
                 }}
               >
                 <input
                   type="text"
-                  placeholder="Ask about past interactions..."
+                  placeholder={askLoading ? 'Submitting...' : 'Ask about past interactions...'}
                   className="w-full px-3 py-2 bg-brown-700 text-white text-sm border-2 border-brown-600 rounded placeholder-brown-400 focus:outline-none focus:border-yellow-400"
                   value={askQuestion}
                   onChange={(e) => setAskQuestion(e.target.value)}
+                  disabled={askLoading}
                 />
               </form>
 
