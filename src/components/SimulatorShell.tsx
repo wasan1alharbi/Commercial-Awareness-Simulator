@@ -22,6 +22,7 @@ export default function SimulatorShell() {
   const [selectedElement, setSelectedElement] = useState<{ kind: 'player'; id: GameId<'players'> }>();
   const [askQuestion, setAskQuestion] = useState('');
   const [askLoading, setAskLoading] = useState(false);
+  const [followUpContext, setFollowUpContext] = useState('');
 
   const convex = useConvex();
 
@@ -31,6 +32,12 @@ export default function SimulatorShell() {
       setSidebarTab('chats');
     }
   }
+  function handleFollowUp(question: string, answer: string) {
+    setFollowUpContext('Previous Q&A:\nQ: ' + question + '\nA: ' + answer);
+    setAskQuestion('');
+    setSidebarTab('history');
+  }
+
   const scrollViewRef = useRef<HTMLDivElement>(null);
 
   const worldStatus = useQuery(api.world.defaultWorldStatus);
@@ -134,7 +141,7 @@ export default function SimulatorShell() {
                       <LiveTab game={game} />
                     )}
                     {sidebarTab === 'history' && worldId && (
-                      <HistoryTab worldId={worldId} />
+                      <HistoryTab worldId={worldId} onFollowUp={handleFollowUp} />
                     )}
                     {sidebarTab === 'history' && !worldId && (
                       <p className="text-brown-400 text-sm text-center mt-8">
@@ -157,7 +164,9 @@ export default function SimulatorShell() {
                   if (askQuestion.trim() === '' || !worldId || askLoading) return;
 
                   let context = '';
-                  if (sidebarTab === 'live' && game) {
+                  if (followUpContext) {
+                    context = followUpContext;
+                  } else if (sidebarTab === 'live' && game) {
                     const summary = game.world.currentArticleSummary || '';
                     const statements = game.world.publicStatements || [];
                     const stmtLines = statements.map(
@@ -176,6 +185,7 @@ export default function SimulatorShell() {
                       context: context.trim(),
                     });
                     setAskQuestion('');
+                    setFollowUpContext('');
                     setSidebarTab('history');
                   } catch (err) {
                     console.error('Failed to submit question:', err);
@@ -185,7 +195,7 @@ export default function SimulatorShell() {
               >
                 <input
                   type="text"
-                  placeholder={askLoading ? 'Submitting...' : 'Ask about past interactions...'}
+                  placeholder={askLoading ? 'Submitting...' : followUpContext ? 'Ask a follow-up...' : 'Ask about past interactions...'}
                   className="w-full px-3 py-2 bg-brown-700 text-white text-sm border-2 border-brown-600 rounded placeholder-brown-400 focus:outline-none focus:border-yellow-400"
                   value={askQuestion}
                   onChange={(e) => setAskQuestion(e.target.value)}
@@ -269,7 +279,7 @@ function LiveTab({ game }: { game: ServerGame | undefined }) {
   );
 }
 
-function HistoryTab({ worldId }: { worldId: Id<'worlds'> }) {
+function HistoryTab({ worldId, onFollowUp }: { worldId: Id<'worlds'>; onFollowUp: (question: string, answer: string) => void }) {
   const chats = useQuery(api.simulator.index.listAskChats, { worldId });
 
   if (chats === undefined) {
@@ -293,7 +303,24 @@ function HistoryTab({ worldId }: { worldId: Id<'worlds'> }) {
       {chats.map((chat) => {
         const timeLabel = new Date(chat.createdAt).toLocaleString();
         return (
-          <div key={chat._id} className="flex flex-col gap-2">
+          <div
+            key={chat._id}
+            className="flex flex-col gap-2"
+            style={{ cursor: chat.answer ? 'pointer' : 'default' }}
+            onClick={() => {
+              if (chat.answer) {
+                onFollowUp(chat.question, chat.answer);
+              }
+            }}
+            onMouseEnter={(e) => {
+              if (chat.answer) {
+                e.currentTarget.style.opacity = '0.8';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.opacity = '1';
+            }}
+          >
             <div className="leading-tight">
               <div className="flex gap-4 justify-end">
                 <span className="uppercase text-xs text-brown-400">You</span>
