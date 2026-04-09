@@ -13,6 +13,7 @@ import { GameId } from '../../convex/aiTown/ids.ts';
 import { api } from '../../convex/_generated/api';
 import { ServerGame, useServerGame } from '../hooks/serverGame.ts';
 import PlayerDetails from './PlayerDetails.tsx';
+import { Id } from '../../convex/_generated/dataModel';
 
 export default function SimulatorShell() {
   const [activeTab, setActiveTab] = useState('simulation');
@@ -132,9 +133,12 @@ export default function SimulatorShell() {
                     {sidebarTab === 'live' && (
                       <LiveTab game={game} />
                     )}
-                    {sidebarTab === 'history' && (
+                    {sidebarTab === 'history' && worldId && (
+                      <HistoryTab worldId={worldId} />
+                    )}
+                    {sidebarTab === 'history' && !worldId && (
                       <p className="text-brown-400 text-sm text-center mt-8">
-                        Past conversations will appear here.
+                        Loading...
                       </p>
                     )}
                     {sidebarTab === 'chats' && (
@@ -261,6 +265,66 @@ function LiveTab({ game }: { game: ServerGame | undefined }) {
           Agents are processing the article... reactions will appear shortly.
         </p>
       )}
+    </div>
+  );
+}
+
+function HistoryTab({ worldId }: { worldId: Id<'worlds'> }) {
+  const chats = useQuery(api.simulator.index.listAskChats, { worldId });
+
+  if (chats === undefined) {
+    return (
+      <p className="text-brown-400 text-sm text-center mt-8">
+        Loading...
+      </p>
+    );
+  }
+
+  if (chats.length === 0) {
+    return (
+      <p className="text-brown-400 text-sm text-center mt-8">
+        No questions asked yet. Use the input below to ask about agent interactions.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {chats.map((chat) => {
+        const timeLabel = new Date(chat.createdAt).toLocaleString();
+        return (
+          <div key={chat._id} className="flex flex-col gap-2">
+            <div className="leading-tight">
+              <div className="flex gap-4 justify-end">
+                <span className="uppercase text-xs text-brown-400">You</span>
+                <time className="text-xs text-brown-400" dateTime={chat.createdAt.toString()}>
+                  {timeLabel}
+                </time>
+              </div>
+              <div className="bubble bubble-mine">
+                <p className="bg-white -mx-3 -my-1 text-black text-sm">{chat.question}</p>
+              </div>
+            </div>
+
+            <div className="leading-tight">
+              <div className="flex gap-4">
+                <span className="uppercase text-xs text-brown-400">Assistant</span>
+              </div>
+              {chat.answer ? (
+                <div className="bubble">
+                  <p className="bg-white -mx-3 -my-1 text-black text-sm">{chat.answer}</p>
+                </div>
+              ) : (
+                <div className="bubble">
+                  <p className="bg-white -mx-3 -my-1 text-black text-sm">
+                    <i>Thinking...</i>
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
