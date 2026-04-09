@@ -281,6 +281,7 @@ function LiveTab({ game }: { game: ServerGame | undefined }) {
 
 function HistoryTab({ worldId, onFollowUp }: { worldId: Id<'worlds'>; onFollowUp: (question: string, answer: string) => void }) {
   const chats = useQuery(api.simulator.index.listAskChats, { worldId });
+  const [openChatId, setOpenChatId] = useState<string | null>(null);
 
   if (chats === undefined) {
     return (
@@ -298,57 +299,83 @@ function HistoryTab({ worldId, onFollowUp }: { worldId: Id<'worlds'>; onFollowUp
     );
   }
 
+  const openChat = openChatId ? chats.find((c) => c._id === openChatId) : null;
+
+  if (openChat) {
+    const timeLabel = new Date(openChat.createdAt).toLocaleString();
+    return (
+      <>
+        <div className="flex justify-between items-center mb-2">
+          <button
+            className="text-xs text-brown-400 hover:text-white"
+            onClick={() => setOpenChatId(null)}
+          >
+            ← Back to list
+          </button>
+          {openChat.answer && (
+            <button
+              className="text-xs text-yellow-400 hover:text-yellow-300"
+              onClick={() => onFollowUp(openChat.question, openChat.answer!)}
+            >
+              Follow up →
+            </button>
+          )}
+        </div>
+        <div className="chats text-base sm:text-sm">
+          <div className="bg-brown-200 text-black p-2">
+            <div className="leading-tight mb-6">
+              <div className="flex gap-4">
+                <span className="uppercase flex-grow">You</span>
+                <time dateTime={openChat.createdAt.toString()}>
+                  {timeLabel}
+                </time>
+              </div>
+              <div className="bubble bubble-mine">
+                <p className="bg-white -mx-3 -my-1">{openChat.question}</p>
+              </div>
+            </div>
+
+            <div className="leading-tight mb-6">
+              <div className="flex gap-4">
+                <span className="uppercase flex-grow">Assistant</span>
+              </div>
+              {openChat.answer ? (
+                <div className="bubble">
+                  <p className="bg-white -mx-3 -my-1">{openChat.answer}</p>
+                </div>
+              ) : (
+                <div className="bubble">
+                  <p className="bg-white -mx-3 -my-1">
+                    <i>typing...</i>
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2">
       {chats.map((chat) => {
         const timeLabel = new Date(chat.createdAt).toLocaleString();
         return (
           <div
             key={chat._id}
-            className="flex flex-col gap-2"
-            style={{ cursor: chat.answer ? 'pointer' : 'default' }}
-            onClick={() => {
-              if (chat.answer) {
-                onFollowUp(chat.question, chat.answer);
-              }
-            }}
-            onMouseEnter={(e) => {
-              if (chat.answer) {
-                e.currentTarget.style.opacity = '0.8';
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.opacity = '1';
-            }}
+            className="bg-brown-700 rounded px-3 py-2 cursor-pointer hover:bg-brown-600"
+            onClick={() => setOpenChatId(chat._id)}
           >
-            <div className="leading-tight">
-              <div className="flex gap-4 justify-end">
-                <span className="uppercase text-xs text-brown-400">You</span>
-                <time className="text-xs text-brown-400" dateTime={chat.createdAt.toString()}>
-                  {timeLabel}
-                </time>
-              </div>
-              <div className="bubble bubble-mine">
-                <p className="bg-white -mx-3 -my-1 text-black text-sm">{chat.question}</p>
-              </div>
+            <div className="flex justify-between items-center">
+              <p className="text-brown-100 text-sm truncate flex-1 mr-2">{chat.question}</p>
+              <time className="text-xs text-brown-400 whitespace-nowrap" dateTime={chat.createdAt.toString()}>
+                {timeLabel}
+              </time>
             </div>
-
-            <div className="leading-tight">
-              <div className="flex gap-4">
-                <span className="uppercase text-xs text-brown-400">Assistant</span>
-              </div>
-              {chat.answer ? (
-                <div className="bubble">
-                  <p className="bg-white -mx-3 -my-1 text-black text-sm">{chat.answer}</p>
-                </div>
-              ) : (
-                <div className="bubble">
-                  <p className="bg-white -mx-3 -my-1 text-black text-sm">
-                    <i>Thinking...</i>
-                  </p>
-                </div>
-              )}
-            </div>
+            {!chat.answer && (
+              <p className="text-yellow-400 text-xs mt-1">Thinking...</p>
+            )}
           </div>
         );
       })}
