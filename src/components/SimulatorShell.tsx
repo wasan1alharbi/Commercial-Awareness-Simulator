@@ -23,7 +23,7 @@ export default function SimulatorShell() {
   const [selectedElement, setSelectedElement] = useState<{ kind: 'player'; id: GameId<'players'> }>();
   const [askQuestion, setAskQuestion] = useState('');
   const [askLoading, setAskLoading] = useState(false);
-  const [followUpContext, setFollowUpContext] = useState('');
+  const [openHistoryChatId, setOpenHistoryChatId] = useState<string | null>(null);
 
   const convex = useConvex();
 
@@ -33,11 +33,6 @@ export default function SimulatorShell() {
       setSidebarTab('chats');
     }
   }
-  function handleFollowUp(question: string, answer: string) {
-    setFollowUpContext('Previous Q&A:\nQ: ' + question + '\nA: ' + answer);
-    setAskQuestion('');
-    setSidebarTab('history');
-  }
 
   const scrollViewRef = useRef<HTMLDivElement>(null);
 
@@ -45,6 +40,7 @@ export default function SimulatorShell() {
   const worldId = worldStatus?.worldId;
   const engineId = worldStatus?.engineId;
   const game = useServerGame(worldId);
+  const askChats = useQuery(api.simulator.index.listAskChats, worldId ? { worldId } : 'skip');
 
   function showSimulation() {
     setActiveTab('simulation');
@@ -142,7 +138,7 @@ export default function SimulatorShell() {
                       <LiveTab game={game} />
                     )}
                     {sidebarTab === 'history' && worldId && (
-                      <HistoryTab worldId={worldId} onFollowUp={handleFollowUp} />
+                      <HistoryTab worldId={worldId} openChatId={openHistoryChatId} setOpenChatId={setOpenHistoryChatId} />
                     )}
                     {sidebarTab === 'history' && !worldId && (
                       <p className="text-brown-400 text-sm text-center mt-8">
@@ -168,8 +164,19 @@ export default function SimulatorShell() {
                   if (askQuestion.trim() === '' || !worldId || askLoading) return;
 
                   let context = '';
-                  if (followUpContext) {
-                    context = followUpContext;
+                  if (sidebarTab === 'history' && openHistoryChatId && askChats) {
+                    const openChat = askChats.find((c) => c._id === openHistoryChatId);
+                    if (openChat) {
+                      const threadChats = askChats.filter((c) => {
+                        if (c._id === openChat._id) return true;
+                        if (c.context && c.context.includes(openChat.question)) return true;
+                        if (openChat.context && openChat.context.includes(c.question)) return true;
+                        return false;
+                      });
+                      threadChats.sort((a, b) => a.createdAt - b.createdAt);
+                      const lines = threadChats.map((c) => 'Q: ' + c.question + '\nA: ' + (c.answer || '(pending)'));
+                      context = 'Previous conversation:\n' + lines.join('\n\n');
+                    }
                   } else if (sidebarTab === 'live' && game) {
                     const summary = game.world.currentArticleSummary || '';
                     const statements = game.world.publicStatements || [];
@@ -189,8 +196,9 @@ export default function SimulatorShell() {
                       context: context.trim(),
                     });
                     setAskQuestion('');
-                    setFollowUpContext('');
-                    setSidebarTab('history');
+                    if (sidebarTab !== 'history') {
+                      setSidebarTab('history');
+                    }
                   } catch (err) {
                     console.error('Failed to submit question:', err);
                   }
@@ -199,7 +207,7 @@ export default function SimulatorShell() {
               >
                 <input
                   type="text"
-                  placeholder={askLoading ? 'Submitting...' : followUpContext ? 'Ask a follow-up...' : 'Ask about past interactions...'}
+                  placeholder={askLoading ? 'Submitting...' : 'Ask about past interactions...'}
                   className="w-full px-3 py-2 bg-brown-700 text-white text-sm border-2 border-brown-600 rounded placeholder-brown-400 focus:outline-none focus:border-yellow-400"
                   value={askQuestion}
                   onChange={(e) => setAskQuestion(e.target.value)}
@@ -283,9 +291,8 @@ function LiveTab({ game }: { game: ServerGame | undefined }) {
   );
 }
 
-function HistoryTab({ worldId, onFollowUp }: { worldId: Id<'worlds'>; onFollowUp: (question: string, answer: string) => void }) {
+function HistoryTab({ worldId, openChatId, setOpenChatId }: { worldId: Id<'worlds'>; openChatId: string | null; setOpenChatId: (id: string | null) => void }) {
   const chats = useQuery(api.simulator.index.listAskChats, { worldId });
-  const [openChatId, setOpenChatId] = useState<string | null>(null);
 
   if (chats === undefined) {
     return (
@@ -298,7 +305,14 @@ function HistoryTab({ worldId, onFollowUp }: { worldId: Id<'worlds'>; onFollowUp
   const openChat = openChatId ? chats.find((c) => c._id === openChatId) : null;
 
   if (openChat) {
-    const timeLabel = new Date(openChat.createdAt).toLocaleString();
+    const allChatsInThread = chats.filter((c) => {
+      if (c._id === openChat._id) return true;
+      if (c.context && c.context.includes(openChat.question)) return true;
+      if (openChat.context && openChat.context.includes(c.question)) return true;
+      return false;
+    });
+    allChatsInThread.sort((a, b) => a.createdAt - b.createdAt);
+
     return (
       <>
         <div className="flex justify-between items-center mb-2">
@@ -308,45 +322,41 @@ function HistoryTab({ worldId, onFollowUp }: { worldId: Id<'worlds'>; onFollowUp
           >
             ← Back to list
           </button>
-          {openChat.answer && (
-            <button
-              className="text-xs text-yellow-400 hover:text-yellow-300"
-              onClick={() => onFollowUp(openChat.question, openChat.answer!)}
-            >
-              Follow up →
-            </button>
-          )}
         </div>
         <div className="chats text-base sm:text-sm">
           <div className="bg-brown-200 text-black p-2">
-            <div className="leading-tight mb-6">
-              <div className="flex gap-4">
-                <span className="uppercase flex-grow">You</span>
-                <time dateTime={openChat.createdAt.toString()}>
-                  {timeLabel}
-                </time>
-              </div>
-              <div className="bubble bubble-mine">
-                <p className="bg-white -mx-3 -my-1">{openChat.question}</p>
-              </div>
-            </div>
+            {allChatsInThread.map((chat) => (
+              <div key={chat._id}>
+                <div className="leading-tight mb-4">
+                  <div className="flex gap-4">
+                    <span className="uppercase flex-grow">You</span>
+                    <time dateTime={chat.createdAt.toString()}>
+                      {new Date(chat.createdAt).toLocaleString()}
+                    </time>
+                  </div>
+                  <div className="bubble bubble-mine">
+                    <p className="bg-white -mx-3 -my-1">{chat.question}</p>
+                  </div>
+                </div>
 
-            <div className="leading-tight mb-6">
-              <div className="flex gap-4">
-                <span className="uppercase flex-grow">Assistant</span>
+                <div className="leading-tight mb-6">
+                  <div className="flex gap-4">
+                    <span className="uppercase flex-grow">Assistant</span>
+                  </div>
+                  {chat.answer ? (
+                    <div className="bubble">
+                      <p className="bg-white -mx-3 -my-1">{chat.answer}</p>
+                    </div>
+                  ) : (
+                    <div className="bubble">
+                      <p className="bg-white -mx-3 -my-1">
+                        <i>typing...</i>
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
-              {openChat.answer ? (
-                <div className="bubble">
-                  <p className="bg-white -mx-3 -my-1">{openChat.answer}</p>
-                </div>
-              ) : (
-                <div className="bubble">
-                  <p className="bg-white -mx-3 -my-1">
-                    <i>typing...</i>
-                  </p>
-                </div>
-              )}
-            </div>
+            ))}
           </div>
         </div>
       </>
