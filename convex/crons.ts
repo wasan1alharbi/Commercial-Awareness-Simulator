@@ -17,6 +17,12 @@ crons.interval('restart dead worlds', { seconds: 60 }, internal.world.restartDea
 
 crons.daily('vacuum old entries', { hourUTC: 4, minuteUTC: 20 }, internal.crons.vacuumOldEntries);
 
+crons.daily(
+  'assessorAgent',
+  { hourUTC: 2, minuteUTC: 0 },
+  internal.simulator.assessorAgent.assessorAgent,
+);
+
 export default crons;
 
 const TablesToVacuum: TableNames[] = [
