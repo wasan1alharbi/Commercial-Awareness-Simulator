@@ -1,6 +1,48 @@
 import { v } from 'convex/values';
 import { internalAction, internalQuery } from '../_generated/server';
 import { internal } from '../_generated/api';
+import { chatCompletion } from '../util/llm';
+
+export interface IdentityChangeResult {
+  changed: boolean;
+  newGoals?: string[];
+  newMotivation?: string;
+}
+
+export async function shouldIdentityChange(
+  currentGoals: string[],
+  currentMotivation: string,
+  memoryDescriptions: string[],
+): Promise<IdentityChangeResult> {
+  const systemPrompt = `You are an identity assessor for a company agent in a business simulation.
+Given the agent's current goals, motivation, and recent memories, decide if the agent's goals or motivation should change.
+Only recommend changes if the memories provide strong evidence that the agent's strategic direction has shifted.
+Return ONLY valid JSON: { "changed": boolean, "newGoals": string[] (2 items, only if changed), "newMotivation": string (only if changed) }`;
+
+  const memorySummary = memoryDescriptions.join('\n- ');
+
+  const userMsg = `Current goals: ${JSON.stringify(currentGoals)}
+Current motivation: ${currentMotivation}
+
+Recent memories:
+- ${memorySummary}`;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { content } = await chatCompletion({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMsg },
+        ],
+        temperature: 0,
+      });
+      return JSON.parse(content as string) as IdentityChangeResult;
+    } catch (err) {
+      if (attempt === 2) throw err;
+    }
+  }
+  throw new Error('shouldIdentityChange failed after 3 attempts');
+}
 
 export const getDefaultWorld = internalQuery({
   args: {},
