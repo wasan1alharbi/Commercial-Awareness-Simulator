@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { internalAction, internalQuery } from '../_generated/server';
+import { internalAction, internalMutation, internalQuery } from '../_generated/server';
 import { internal } from '../_generated/api';
 import { chatCompletion } from '../util/llm';
 
@@ -79,6 +79,25 @@ export const getMemoriesForPlayer = internalQuery({
   },
 });
 
+export const patchAgentIdentity = internalMutation({
+  args: {
+    agentDescId: v.id('agentDescriptions'),
+    goals: v.optional(v.array(v.string())),
+    motivation: v.optional(v.string()),
+    lastAssessedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const patch: Record<string, any> = { lastAssessedAt: args.lastAssessedAt };
+    if (args.goals !== undefined) {
+      patch.goals = args.goals;
+    }
+    if (args.motivation !== undefined) {
+      patch.motivation = args.motivation;
+    }
+    await ctx.db.patch(args.agentDescId, patch);
+  },
+});
+
 export const assessorAgent = internalAction({
   args: {},
   handler: async (ctx) => {
@@ -125,6 +144,38 @@ export const assessorAgent = internalAction({
       console.log(
         'Assessor: agent ' + (agentDesc.name ?? agent.id) + ' has ' + newMemories.length + ' new memories since last assessment',
       );
+
+      const memoryDescriptions = [];
+      for (let i = 0; i < newMemories.length; i++) {
+        memoryDescriptions.push(newMemories[i].description);
+      }
+
+      const currentGoals = agentDesc.goals ?? [];
+      const currentMotivation = agentDesc.motivation ?? '';
+
+      const result = await shouldIdentityChange(currentGoals, currentMotivation, memoryDescriptions);
+
+      const now = Date.now();
+
+      if (result.changed && result.newGoals && result.newMotivation) {
+        console.log(
+          'Assessor: updating goals + motivation for ' + (agentDesc.name ?? agent.id),
+        );
+        await ctx.runMutation(selfInternal.patchAgentIdentity, {
+          agentDescId: agentDesc._id,
+          goals: result.newGoals,
+          motivation: result.newMotivation,
+          lastAssessedAt: now,
+        });
+      } else {
+        console.log(
+          'Assessor: no identity change for ' + (agentDesc.name ?? agent.id) + ', updating lastAssessedAt only',
+        );
+        await ctx.runMutation(selfInternal.patchAgentIdentity, {
+          agentDescId: agentDesc._id,
+          lastAssessedAt: now,
+        });
+      }
     }
 
     console.log('Assessor: run complete');
