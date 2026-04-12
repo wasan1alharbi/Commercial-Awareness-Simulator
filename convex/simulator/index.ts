@@ -572,6 +572,202 @@ export const startQuiz = action({
   },
 });
 
+async function evaluateImpact(
+  scenario: string,
+  selectedOptionText: string,
+  currentKPIs: { profit: number; marketShare: number; liquidity: number; trust: number; compliance: number },
+): Promise<{ profit: number; marketShare: number; liquidity: number; trust: number; compliance: number }> {
+  const systemPrompt =
+    'You are a business impact evaluator. Given a scenario question, the answer a student chose, and the current KPI values, ' +
+    'determine how the chosen answer would impact 5 KPIs: profit, marketShare, liquidity, trust, compliance. ' +
+    'Return ONLY valid JSON with integer deltas (positive or negative) for each KPI. ' +
+    'Deltas should be between -30 and 30. Example: {"profit": 10, "marketShare": -5, "liquidity": 0, "trust": 15, "compliance": -10}';
+
+  const userPrompt =
+    'Scenario: ' + scenario +
+    '\nStudent chose: ' + selectedOptionText +
+    '\nCurrent KPIs: profit=' + currentKPIs.profit +
+    ', marketShare=' + currentKPIs.marketShare +
+    ', liquidity=' + currentKPIs.liquidity +
+    ', trust=' + currentKPIs.trust +
+    ', compliance=' + currentKPIs.compliance;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { content } = await chatCompletion({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.7,
+      });
+      const raw = (content as string).trim();
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+      const parsed = JSON.parse(cleaned);
+      if (
+        typeof parsed.profit !== 'number' ||
+        typeof parsed.marketShare !== 'number' ||
+        typeof parsed.liquidity !== 'number' ||
+        typeof parsed.trust !== 'number' ||
+        typeof parsed.compliance !== 'number'
+      ) {
+        throw new Error('Missing KPI fields in LLM response');
+      }
+      return parsed;
+    } catch (err) {
+      if (attempt === 2) throw err;
+    }
+  }
+  throw new Error('evaluateImpact failed after 3 attempts');
+}
+
+export const getQuizSession = internalQuery({
+  args: { sessionId: v.id('quizSessions') },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.sessionId);
+  },
+});
+
+export const getKpiSnapshot = internalQuery({
+  args: { sessionId: v.id('quizSessions') },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query('kpiSnapshots')
+      .withIndex('bySession', (q) => q.eq('sessionId', args.sessionId))
+      .unique();
+  },
+});
+
+export const patchKpiSnapshot = internalMutation({
+  args: {
+    snapshotId: v.id('kpiSnapshots'),
+    profit: v.number(),
+    marketShare: v.number(),
+    liquidity: v.number(),
+    trust: v.number(),
+    compliance: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.snapshotId, {
+      profit: args.profit,
+      marketShare: args.marketShare,
+      liquidity: args.liquidity,
+      trust: args.trust,
+      compliance: args.compliance,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const patchQuizSession = internalMutation({
+  args: {
+    sessionId: v.id('quizSessions'),
+    answers: v.array(v.object({
+      questionId: v.string(),
+      selectedLabel: v.string(),
+      submittedAt: v.number(),
+    })),
+    status: v.union(v.literal('active'), v.literal('completed')),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.sessionId, {
+      answers: args.answers,
+      status: args.status,
+    });
+  },
+});
+
+function clampKpi(value: number): number {
+  return Math.max(-100, Math.min(100, value));
+}
+
+export const submitAnswer = action({
+  args: {
+    sessionId: v.id('quizSessions'),
+    questionId: v.string(),
+    selectedLabel: v.string(),
+  },
+  handler: async (ctx, args): Promise<{
+    profit: number;
+    marketShare: number;
+    liquidity: number;
+    trust: number;
+    compliance: number;
+  }> => {
+    const session = await ctx.runQuery(internal.simulator.index.getQuizSession, {
+      sessionId: args.sessionId,
+    });
+    if (!session) {
+      throw new Error('Quiz session not found: ' + args.sessionId);
+    }
+    if (session.status !== 'active') {
+      throw new Error('Quiz session is not active.');
+    }
+
+    const question = session.questions.find((q: { id: string }) => q.id === args.questionId);
+    if (!question) {
+      throw new Error('Question not found: ' + args.questionId);
+    }
+
+    const selectedOption = question.options.find(
+      (o: { label: string; text: string }) => o.label === args.selectedLabel,
+    );
+    if (!selectedOption) {
+      throw new Error('Option not found: ' + args.selectedLabel);
+    }
+
+    const snapshot = await ctx.runQuery(internal.simulator.index.getKpiSnapshot, {
+      sessionId: args.sessionId,
+    });
+    if (!snapshot) {
+      throw new Error('KPI snapshot not found for session: ' + args.sessionId);
+    }
+
+    const currentKPIs = {
+      profit: snapshot.profit,
+      marketShare: snapshot.marketShare,
+      liquidity: snapshot.liquidity,
+      trust: snapshot.trust,
+      compliance: snapshot.compliance,
+    };
+
+    const deltas = await evaluateImpact(question.scenario, selectedOption.text, currentKPIs);
+
+    const newKPIs = {
+      profit: clampKpi(currentKPIs.profit + deltas.profit),
+      marketShare: clampKpi(currentKPIs.marketShare + deltas.marketShare),
+      liquidity: clampKpi(currentKPIs.liquidity + deltas.liquidity),
+      trust: clampKpi(currentKPIs.trust + deltas.trust),
+      compliance: clampKpi(currentKPIs.compliance + deltas.compliance),
+    };
+
+    await ctx.runMutation(internal.simulator.index.patchKpiSnapshot, {
+      snapshotId: snapshot._id,
+      ...newKPIs,
+    });
+
+    const updatedAnswers = [
+      ...session.answers,
+      {
+        questionId: args.questionId,
+        selectedLabel: args.selectedLabel,
+        submittedAt: Date.now(),
+      },
+    ];
+
+    const allAnswered = updatedAnswers.length >= session.numQuestions;
+    const newStatus = allAnswered ? 'completed' as const : 'active' as const;
+
+    await ctx.runMutation(internal.simulator.index.patchQuizSession, {
+      sessionId: args.sessionId,
+      answers: updatedAnswers,
+      status: newStatus,
+    });
+
+    return newKPIs;
+  },
+});
+
 export const listArchivedConversations = query({
   args: { worldId: v.id('worlds') },
   handler: async (ctx, args) => {
