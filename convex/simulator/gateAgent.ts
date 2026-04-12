@@ -35,7 +35,7 @@ Return ONLY valid JSON with keys: isValid, rejectionReason, companies, summary`;
         ],
         temperature: 0,
       });
-      return JSON.parse(content as string) as GateAgentResult;
+      return JSON.parse((content as string).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')) as GateAgentResult;
     } catch (err) {
       if (i === 2) throw err;
     }
@@ -66,7 +66,7 @@ News: ${articleSummary}`;
         ],
         temperature: 0,
       });
-      return JSON.parse(content as string) as AgentIdentity;
+      return JSON.parse((content as string).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')) as AgentIdentity;
     } catch (err) {
       if (i === 2) throw err;
     }

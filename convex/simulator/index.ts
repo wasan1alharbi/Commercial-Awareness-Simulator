@@ -416,6 +416,162 @@ export const answerAskQuestion = internalAction({
   },
 });
 
+export const getArticleById = internalQuery({
+  args: { articleId: v.id('articles') },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.articleId);
+  },
+});
+
+export const insertQuizSession = internalMutation({
+  args: {
+    worldId: v.id('worlds'),
+    articleId: v.id('articles'),
+    difficulty: v.union(v.literal('easy'), v.literal('medium'), v.literal('hard')),
+    numQuestions: v.union(v.literal(3), v.literal(6), v.literal(10)),
+    includeAgentContext: v.boolean(),
+    questions: v.array(
+      v.object({
+        id: v.string(),
+        scenario: v.string(),
+        options: v.array(v.object({ label: v.string(), text: v.string() })),
+        correctLabel: v.optional(v.string()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert('quizSessions', {
+      worldId: args.worldId,
+      articleId: args.articleId,
+      difficulty: args.difficulty,
+      numQuestions: args.numQuestions,
+      includeAgentContext: args.includeAgentContext,
+      questions: args.questions,
+      answers: [],
+      status: 'active',
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const insertInitialKpiSnapshot = internalMutation({
+  args: { sessionId: v.id('quizSessions') },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert('kpiSnapshots', {
+      sessionId: args.sessionId,
+      profit: 0,
+      marketShare: 0,
+      liquidity: 0,
+      trust: 0,
+      compliance: 0,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+async function generateScenarioQuestions(
+  articleSummary: string,
+  difficulty: string,
+  count: number,
+  agentContext?: string,
+): Promise<Array<{ id: string; scenario: string; options: Array<{ label: string; text: string }> }>> {
+  const difficultyGuide =
+    difficulty === 'easy'
+      ? 'Questions should test basic comprehension of the news.'
+      : difficulty === 'medium'
+        ? 'Questions should require applying business concepts to the scenario.'
+        : 'Questions should require strategic analysis and multi-step reasoning.';
+
+  let contextBlock = '';
+  if (agentContext) {
+    contextBlock = '\nAgent context from the simulation:\n' + agentContext + '\n';
+  }
+
+  const systemPrompt =
+    'You are a business education quiz generator. Given a news summary, generate scenario-based multiple choice questions.\n' +
+    difficultyGuide +
+    '\nEach question must have 2-4 options with unique single-letter labels (A, B, C, D).\n' +
+    'Return ONLY a valid JSON array of objects with keys: id (string like "q1", "q2"), scenario (the question text), options (array of {label, text}).';
+
+  const userPrompt =
+    'Article summary: ' + articleSummary + contextBlock + '\nGenerate exactly ' + count + ' questions.';
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { content } = await chatCompletion({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.7,
+      });
+      const raw = (content as string).trim();
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+      const parsed = JSON.parse(cleaned);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        throw new Error('Expected a non-empty array of questions');
+      }
+      return parsed;
+    } catch (err) {
+      if (attempt === 2) throw err;
+    }
+  }
+  throw new Error('generateScenarioQuestions failed after 3 attempts');
+}
+
+export const startQuiz = action({
+  args: {
+    articleId: v.id('articles'),
+    difficulty: v.union(v.literal('easy'), v.literal('medium'), v.literal('hard')),
+    numQuestions: v.union(v.literal(3), v.literal(6), v.literal(10)),
+    includeAgentContext: v.boolean(),
+  },
+  handler: async (ctx, args): Promise<{ sessionId: string }> => {
+    const article = await ctx.runQuery(internal.simulator.index.getArticleById, {
+      articleId: args.articleId,
+    });
+
+    if (!article) {
+      throw new Error('Article not found: ' + args.articleId);
+    }
+
+    let agentContext: string | undefined;
+    if (args.includeAgentContext) {
+      const world = await ctx.runQuery(internal.simulator.index.getWorldById, {
+        worldId: article.worldId,
+      });
+      if (world && world.publicStatements && world.publicStatements.length > 0) {
+        const statements = world.publicStatements.map(
+          (s: { agentName: string; statement: string }) => s.agentName + ': ' + s.statement,
+        );
+        agentContext = statements.join('\n');
+      }
+    }
+
+    const questions = await generateScenarioQuestions(
+      article.summary,
+      args.difficulty,
+      args.numQuestions,
+      agentContext,
+    );
+
+    const sessionId = await ctx.runMutation(internal.simulator.index.insertQuizSession, {
+      worldId: article.worldId,
+      articleId: args.articleId,
+      difficulty: args.difficulty,
+      numQuestions: args.numQuestions,
+      includeAgentContext: args.includeAgentContext,
+      questions: questions,
+    });
+
+    await ctx.runMutation(internal.simulator.index.insertInitialKpiSnapshot, {
+      sessionId: sessionId,
+    });
+
+    return { sessionId };
+  },
+});
+
 export const listArchivedConversations = query({
   args: { worldId: v.id('worlds') },
   handler: async (ctx, args) => {

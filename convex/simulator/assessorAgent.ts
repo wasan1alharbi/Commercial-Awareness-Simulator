@@ -36,7 +36,9 @@ Recent memories:
         ],
         temperature: 0,
       });
-      return JSON.parse(content as string) as IdentityChangeResult;
+      const raw = (content as string).trim();
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+      return JSON.parse(cleaned) as IdentityChangeResult;
     } catch (err) {
       if (attempt === 2) throw err;
     }
