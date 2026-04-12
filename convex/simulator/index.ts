@@ -768,6 +768,35 @@ export const submitAnswer = action({
   },
 });
 
+export const listArticles = query({
+  args: { worldId: v.id('worlds') },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query('articles')
+      .withIndex('byWorld', (q) => q.eq('worldId', args.worldId))
+      .collect();
+    rows.sort((a, b) => b.submittedAt - a.submittedAt);
+    return rows;
+  },
+});
+
+export const getQuizSessionById = query({
+  args: { sessionId: v.id('quizSessions') },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.sessionId);
+  },
+});
+
+export const getKpiSnapshotPublic = query({
+  args: { sessionId: v.id('quizSessions') },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query('kpiSnapshots')
+      .withIndex('bySession', (q) => q.eq('sessionId', args.sessionId))
+      .unique();
+  },
+});
+
 export const listArchivedConversations = query({
   args: { worldId: v.id('worlds') },
   handler: async (ctx, args) => {

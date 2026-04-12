@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useConvex, useQuery } from 'convex/react';
 import Game from './Game.tsx';
 import ArticleInputPanel from './ArticleInputPanel.tsx';
+import QuizDashboard from './QuizDashboard.tsx';
 import FreezeButton from './FreezeButton.tsx';
 import MusicButton from './buttons/MusicButton.tsx';
 import Button from './buttons/Button.tsx';
@@ -220,9 +221,15 @@ export default function SimulatorShell() {
         </div>
       )}
 
-      {activeTab === 'practice' && (
-        <div className="flex items-center justify-center flex-1 text-brown-100 font-display text-2xl">
-          Practice Session — coming soon
+      {activeTab === 'practice' && worldId && (
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }} className="bg-brown-900">
+          <QuizDashboard worldId={worldId} />
+        </div>
+      )}
+
+      {activeTab === 'practice' && !worldId && (
+        <div className="flex items-center justify-center flex-1 text-brown-400 font-body text-sm">
+          Loading...
         </div>
       )}
 
