@@ -3,6 +3,7 @@ import { useConvex, useQuery } from 'convex/react';
 import Game from './Game.tsx';
 import ArticleInputPanel from './ArticleInputPanel.tsx';
 import QuizDashboard from './QuizDashboard.tsx';
+import KPIDashboard from './KPIDashboard.tsx';
 import FreezeButton from './FreezeButton.tsx';
 import MusicButton from './buttons/MusicButton.tsx';
 import Button from './buttons/Button.tsx';
@@ -25,6 +26,7 @@ export default function SimulatorShell() {
   const [askQuestion, setAskQuestion] = useState('');
   const [askLoading, setAskLoading] = useState(false);
   const [openHistoryChatId, setOpenHistoryChatId] = useState<string | null>(null);
+  const [practiceSessionId, setPracticeSessionId] = useState<Id<'quizSessions'> | null>(null);
 
   const convex = useConvex();
 
@@ -49,6 +51,7 @@ export default function SimulatorShell() {
 
   function showPractice() {
     setActiveTab('practice');
+    setPracticeSessionId(null);
   }
 
   function showLiveTab() {
@@ -223,7 +226,14 @@ export default function SimulatorShell() {
 
       {activeTab === 'practice' && worldId && (
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }} className="bg-brown-900">
-          <QuizDashboard worldId={worldId} />
+          <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+            <QuizDashboard worldId={worldId} onActiveSessionChange={setPracticeSessionId} />
+          </div>
+          {practiceSessionId && (
+            <div style={{ width: '30%', flexShrink: 0, overflow: 'hidden' }} className="bg-brown-800 border-l-8 border-brown-900">
+              <KPIDashboard sessionId={practiceSessionId} />
+            </div>
+          )}
         </div>
       )}
 

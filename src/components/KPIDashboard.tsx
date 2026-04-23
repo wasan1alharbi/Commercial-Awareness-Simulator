@@ -22,64 +22,34 @@ export default function KPIDashboard({ sessionId }: { sessionId: Id<'quizSession
     );
   }
 
-  const profitValue = kpiSnapshot.profit;
-  const marketShareValue = kpiSnapshot.marketShare;
-  const liquidityValue = kpiSnapshot.liquidity;
-  const trustValue = kpiSnapshot.trust;
-  const complianceValue = kpiSnapshot.compliance;
+  const kpis = [
+    { name: 'Profit', value: kpiSnapshot.profit },
+    { name: 'Market Share', value: kpiSnapshot.marketShare },
+    { name: 'Liquidity', value: kpiSnapshot.liquidity },
+    { name: 'Trust', value: kpiSnapshot.trust },
+    { name: 'Compliance', value: kpiSnapshot.compliance },
+  ];
 
   return (
-    <div className="flex flex-col gap-4 p-4 h-full overflow-y-auto">
-      <h2 className="font-display text-lg text-white text-center">KPI Dashboard</h2>
-
-      <KPIBar label="Profit" value={profitValue} />
-      <KPIBar label="Market Share" value={marketShareValue} />
-      <KPIBar label="Liquidity" value={liquidityValue} />
-      <KPIBar label="Trust" value={trustValue} />
-      <KPIBar label="Compliance" value={complianceValue} />
-    </div>
-  );
-}
-
-function KPIBar({ label, value }: { label: string; value: number }) {
-  let barColor = '#a8a29e';
-  if (value > 0) {
-    barColor = '#22c55e';
-  } else if (value < 0) {
-    barColor = '#ef4444';
-  }
-
-  let valueColor = 'text-white';
-  if (value > 0) {
-    valueColor = 'text-green-400';
-  } else if (value < 0) {
-    valueColor = 'text-red-400';
-  }
-
-  const chartData = [{ name: label, value: value }];
-
-  return (
-    <div className="bg-brown-800 rounded-lg p-3">
-      <p className="font-body text-xs text-brown-400 mb-1">{label}</p>
-      <div aria-label={label + ': ' + value} role="img">
-        <ResponsiveContainer width="100%" height={60}>
-          <BarChart
-            data={chartData}
-            layout="vertical"
-            margin={{ top: 0, right: 30, bottom: 0, left: 0 }}
-          >
-            <XAxis type="number" domain={[-100, 100]} hide />
-            <YAxis type="category" dataKey="name" hide />
+    <div className="flex flex-col items-center justify-center h-full px-6">
+      <h2 className="font-display text-2xl text-white mb-6">KPI Dashboard</h2>
+      <div className="w-full" aria-label={'KPI scores: ' + kpis.map((d) => d.name + ' ' + d.value).join(', ')} role="img">
+        <ResponsiveContainer width="100%" height={400}>
+          <BarChart data={kpis} layout="vertical" margin={{ top: 10, right: 40, bottom: 10, left: 10 }}>
+            <XAxis type="number" domain={[-100, 100]} tick={{ fill: '#a89070', fontSize: 13 }} />
+            <YAxis type="category" dataKey="name" tick={{ fill: '#d6cfc4', fontSize: 14 }} width={100} />
             <ReferenceLine x={0} stroke="#78716c" />
-            <Bar dataKey="value" barSize={24} radius={[4, 4, 4, 4]}>
-              <Cell fill={barColor} />
+            <Bar dataKey="value" barSize={28} radius={[6, 6, 6, 6]}>
+              {kpis.map((d, i) => {
+                let color = '#a8a29e';
+                if (d.value > 0) color = '#22c55e';
+                if (d.value < 0) color = '#ef4444';
+                return <Cell key={i} fill={color} />;
+              })}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <p className={'font-display text-center text-lg ' + valueColor}>
-        {value > 0 ? '+' : ''}{value}
-      </p>
     </div>
   );
 }

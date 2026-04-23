@@ -3,7 +3,13 @@ import { useConvex, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
 
-export default function QuizDashboard({ worldId }: { worldId: Id<'worlds'> }) {
+export default function QuizDashboard({
+  worldId,
+  onActiveSessionChange,
+}: {
+  worldId: Id<'worlds'>;
+  onActiveSessionChange?: (sessionId: Id<'quizSessions'> | null) => void;
+}) {
   const [selectedArticleId, setSelectedArticleId] = useState<Id<'articles'> | null>(null);
   const [difficulty, setDifficulty] = useState('');
   const [numQuestions, setNumQuestions] = useState('');
@@ -12,11 +18,18 @@ export default function QuizDashboard({ worldId }: { worldId: Id<'worlds'> }) {
   const [activeSessionId, setActiveSessionId] = useState<Id<'quizSessions'> | null>(null);
   const [startError, setStartError] = useState('');
 
+  function updateActiveSession(sessionId: Id<'quizSessions'> | null) {
+    setActiveSessionId(sessionId);
+    if (onActiveSessionChange) {
+      onActiveSessionChange(sessionId);
+    }
+  }
+
   const convex = useConvex();
   const articles = useQuery(api.simulator.index.listArticles, { worldId });
 
   if (activeSessionId) {
-    return <ActiveQuiz sessionId={activeSessionId} onBack={() => setActiveSessionId(null)} />;
+    return <ActiveQuiz sessionId={activeSessionId} onBack={() => updateActiveSession(null)} />;
   }
 
   async function handleStartQuiz() {
@@ -30,7 +43,7 @@ export default function QuizDashboard({ worldId }: { worldId: Id<'worlds'> }) {
         numQuestions: Number(numQuestions) as 3 | 6 | 10,
         includeAgentContext: includeAgentContext === 'yes',
       });
-      setActiveSessionId(result.sessionId as Id<'quizSessions'>);
+      updateActiveSession(result.sessionId as Id<'quizSessions'>);
     } catch (err) {
       setStartError('Something went wrong, try again.');
     }
@@ -202,13 +215,12 @@ function ActiveQuiz({
   onBack: () => void;
 }) {
   const session = useQuery(api.simulator.index.getQuizSessionById, { sessionId });
-  const kpiSnapshot = useQuery(api.simulator.index.getKpiSnapshotPublic, { sessionId });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
   const convex = useConvex();
 
-  if (session === undefined || kpiSnapshot === undefined) {
+  if (session === undefined) {
     return (
       <div className="flex items-center justify-center" style={{ flex: 1 }}>
         <p className="text-brown-400 font-body text-sm">Loading...</p>
@@ -250,21 +262,11 @@ function ActiveQuiz({
     setIsSubmitting(false);
   }
 
-  const kpis = kpiSnapshot
-    ? [
-        { name: 'Profit', value: kpiSnapshot.profit },
-        { name: 'Market Share', value: kpiSnapshot.marketShare },
-        { name: 'Liquidity', value: kpiSnapshot.liquidity },
-        { name: 'Trust', value: kpiSnapshot.trust },
-        { name: 'Compliance', value: kpiSnapshot.compliance },
-      ]
-    : [];
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', height: '100%' }}>
-      {/* KPI bar */}
+      {/* Progress bar */}
       <div className="px-5 py-3 bg-brown-800 border-b-4 border-brown-900">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between">
           <button onClick={onBack} className="text-brown-400 hover:text-white text-sm font-body">
             ← Back
           </button>
@@ -280,30 +282,11 @@ function ActiveQuiz({
             </div>
           </div>
         </div>
-        <div className="flex gap-3">
-          {kpis.map((kpi) => {
-            let valueColor = 'text-white';
-            if (kpi.value > 20) valueColor = 'text-green-400';
-            else if (kpi.value < -20) valueColor = 'text-red-400';
-            else if (kpi.value < 0) valueColor = 'text-orange-300';
-            return (
-              <div key={kpi.name} className="flex-1 bg-brown-700 rounded px-3 py-2 text-center">
-                <p className="font-body text-xs text-brown-400">{kpi.name}</p>
-                <p
-                  className={'font-display text-xl transition-colors ' + valueColor}
-                  aria-label={kpi.name + ': ' + kpi.value}
-                >
-                  {kpi.value > 0 ? '+' : ''}{kpi.value}
-                </p>
-              </div>
-            );
-          })}
-        </div>
       </div>
 
       {/* Question area */}
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center' }} className="p-8">
-        <div className="w-full max-w-2xl">
+      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="px-16 py-12">
+        <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto' }}>
           {isCompleted && (
             <div className="text-center mt-8">
               <p className="font-display text-2xl text-yellow-400 mb-3">Done!</p>
@@ -320,21 +303,21 @@ function ActiveQuiz({
           )}
 
           {!isCompleted && currentQuestion && (
-            <div className="flex flex-col gap-5">
-              <p className="font-display text-xs text-brown-500 uppercase tracking-widest">
+            <div className="flex flex-col gap-8">
+              <p className="font-display text-sm text-brown-500 uppercase tracking-widest">
                 Question {questionsAnswered + 1} of {totalQuestions}
               </p>
-              <p className="font-body text-lg text-white leading-relaxed">
+              <p className="font-body text-2xl text-white leading-relaxed">
                 {currentQuestion.scenario}
               </p>
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-5">
                 {currentQuestion.options.map((option) => (
                   <button
                     key={option.label}
                     onClick={() => handleAnswer(currentQuestion.id, option.label)}
                     disabled={isSubmitting}
                     className={
-                      'text-left px-5 py-4 rounded border-2 font-body text-sm transition-colors flex items-start gap-3 ' +
+                      'text-left px-6 py-5 rounded border-2 font-body text-base transition-colors flex items-start gap-4 ' +
                       (isSubmitting
                         ? 'bg-brown-800 border-brown-700 text-brown-500 cursor-not-allowed'
                         : 'bg-brown-800 border-brown-700 text-brown-200 hover:border-yellow-400 hover:bg-brown-700')
