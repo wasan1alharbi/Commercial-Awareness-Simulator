@@ -75,7 +75,7 @@ export const insertArticle = internalMutation({
     extractedCompanies: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert('articles', {
+    const articleId = await ctx.db.insert('articles', {
       worldId: args.worldId,
       rawText: args.rawText,
       summary: args.summary,
@@ -83,16 +83,8 @@ export const insertArticle = internalMutation({
       isValid: true,
       submittedAt: Date.now(),
     });
-  },
-});
-
-export const patchWorldSummary = internalMutation({
-  args: {
-    worldId: v.id('worlds'),
-    summary: v.string(),
-  },
-  handler: async (ctx, args) => {
     await ctx.db.patch(args.worldId, { currentArticleSummary: args.summary });
+    return articleId;
   },
 });
 
@@ -249,11 +241,6 @@ export const submitArticle = action({
       rawText: args.text,
       summary: result.summary,
       extractedCompanies: result.companies,
-    });
-
-    await ctx.runMutation(internal.simulator.index.patchWorldSummary, {
-      worldId: args.worldId,
-      summary: result.summary,
     });
 
     await ctx.runMutation(internal.simulator.index.updateWorldContextViaInput, {
