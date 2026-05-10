@@ -91,5 +91,22 @@ describe('gateAgentPrompt', () => {
     const callArgs = mockChatCompletion.mock.calls[0][0];
     expect(callArgs.temperature).toBe(0);
   });
+// check the system prompt still has the right phrases
+  test('test_uses_expected_system_prompt', async () => {
+    const goodResponse = JSON.stringify({
+      isValid: true,
+      rejectionReason: null,
+      companies: ['Apple'],
+      summary: 'Apple announces new iPhone.',
+    });
+    mockChatCompletion.mockResolvedValueOnce({ content: goodResponse });
 
+    await gateAgentPrompt('Apple announces new iPhone...');
+
+    const callArgs = mockChatCompletion.mock.calls[0][0];
+    const systemMsg = callArgs.messages[0];
+    expect(systemMsg.role).toBe('system');
+    expect(systemMsg.content).toContain('commercial news validator');
+    expect(systemMsg.content).toContain('isValid, rejectionReason, companies, summary');
+  });
 });
