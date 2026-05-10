@@ -92,6 +92,21 @@ describe('isSameArticleForDuplicateCheck', () => {
     expect(isSameArticleForDuplicateCheck(a, b)).toBe(false);
   });
 
+  // 16 word article with one word swapped. cosine = 15/16 ≈ 0.94
+  // just above the 0.92 cutoff = considered a duplicate
+  test('test_near_duplicate_long_articles_are_duplicates', () => {
+    const a = 'Apple acquires Anthropic in landmark deal worth fifty billion dollars across global markets and infrastructure today';
+    const b = 'Apple acquires Anthropic in landmark deal worth fifty billion pounds across global markets and infrastructure today';
+    expect(isSameArticleForDuplicateCheck(a, b)).toBe(true);
+  });
+
+  // three words swapped, cosine ~0.81, below the 0.92 cutoff
+  test('test_long_articles_with_partial_overlap_are_not_duplicates', () => {
+    const a = 'Apple acquires Anthropic in landmark deal worth fifty billion dollars across global markets and infrastructure today';
+    const b = 'Apple acquires Anthropic in landmark deal worth fifty billion pounds across regional markets and infrastructure tomorrow';
+    expect(isSameArticleForDuplicateCheck(a, b)).toBe(false);
+  });
+
 });
 
 describe('cosineSimilarityOfWordBags', () => {
