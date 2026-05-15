@@ -126,6 +126,7 @@ export default function QuizDashboard({
             <select
               value={difficulty}
               onChange={(e) => setDifficulty(e.target.value)}
+              aria-label="Difficulty level"
               className="w-full px-4 py-3 bg-brown-700 text-white border-2 border-brown-600 rounded font-body text-base focus:outline-none focus:border-yellow-400 appearance-none cursor-pointer"
               style={{
                 backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'8\' viewBox=\'0 0 12 8\'%3E%3Cpath d=\'M1 1l5 5 5-5\' stroke=\'%23a89070\' stroke-width=\'2\' fill=\'none\'/%3E%3C/svg%3E")',
@@ -147,6 +148,7 @@ export default function QuizDashboard({
             <select
               value={numQuestions}
               onChange={(e) => setNumQuestions(e.target.value)}
+              aria-label="Number of questions"
               className="w-full px-4 py-3 bg-brown-700 text-white border-2 border-brown-600 rounded font-body text-base focus:outline-none focus:border-yellow-400 appearance-none cursor-pointer"
               style={{
                 backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'8\' viewBox=\'0 0 12 8\'%3E%3Cpath d=\'M1 1l5 5 5-5\' stroke=\'%23a89070\' stroke-width=\'2\' fill=\'none\'/%3E%3C/svg%3E")',
@@ -168,6 +170,7 @@ export default function QuizDashboard({
             <select
               value={includeAgentContext}
               onChange={(e) => setIncludeAgentContext(e.target.value)}
+              aria-label="Include simulation interactions in quiz context"
               className="w-full px-4 py-3 bg-brown-700 text-white border-2 border-brown-600 rounded font-body text-base focus:outline-none focus:border-yellow-400 appearance-none cursor-pointer"
               style={{
                 backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'8\' viewBox=\'0 0 12 8\'%3E%3Cpath d=\'M1 1l5 5 5-5\' stroke=\'%23a89070\' stroke-width=\'2\' fill=\'none\'/%3E%3C/svg%3E")',

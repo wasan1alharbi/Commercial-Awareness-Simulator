@@ -70,6 +70,7 @@ export default function ArticleInputPanel() {
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
+        aria-label="Business news article to ingest"
         placeholder="Paste a business news article here (minimum 50 characters)..."
         rows={4}
         disabled={isLoading}

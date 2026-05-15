@@ -144,7 +144,7 @@ export default function PlayerDetails({
           onClick={() => setSelectedElement(undefined)}
         >
           <h2 className="h-full bg-clay-700">
-            <img className="w-4 h-4 sm:w-5 sm:h-5" src={closeImg} />
+            <img className="w-4 h-4 sm:w-5 sm:h-5" src={closeImg} alt="Close" />
           </h2>
         </a>
       </div>

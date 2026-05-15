@@ -91,7 +91,7 @@ export default function SimulatorShell() {
       </ReactModal>
 
       <nav className="flex items-center px-8 py-8 bg-brown-800 border-b-4 border-brown-900">
-        <span className="text-white font-display text-4xl mr-10">Commercial Awareness</span>
+        <h1 className="text-white font-display text-4xl mr-10">Commercial Awareness</h1>
         <button onClick={showSimulation} className={activeTab === 'simulation' ? navTabActiveStyle : navTabStyle}>
           Simulation
         </button>
@@ -168,6 +168,20 @@ export default function SimulatorShell() {
                   if (askQuestion.trim() === '' || !worldId || askLoading) return;
 
                   let context = '';
+                  // Always build the world-state context first
+                  const summary = game?.world?.currentArticleSummary || '';
+                  const statements = game?.world?.publicStatements || [];
+                  const stmtLines = statements.map(
+                    (s: { agentName: string; statement: string }) => s.agentName + ': ' + s.statement,
+                  );
+                  const worldParts: string[] = [];
+                  if (summary) worldParts.push(`Current article: ${summary}`);
+                  if (stmtLines.length) worldParts.push(`Agent positions:\n${stmtLines.join('\n')}`);
+                  const worldContext = worldParts.length
+                    ? worldParts.join('\n\n')
+                    : 'No active simulation yet: no article has been submitted to this world. You need to submit a business article in order to ask questions about agent interactions.';
+
+                  // If continuing a chat thread, prepend world state then append thread history
                   if (sidebarTab === 'history' && openHistoryChatId && askChats) {
                     const openChat = askChats.find((c) => c._id === openHistoryChatId);
                     if (openChat) {
@@ -179,17 +193,12 @@ export default function SimulatorShell() {
                       });
                       threadChats.sort((a, b) => a.createdAt - b.createdAt);
                       const lines = threadChats.map((c) => 'Q: ' + c.question + '\nA: ' + (c.answer || '(pending)'));
-                      context = 'Previous conversation:\n' + lines.join('\n\n');
+                      context = `${worldContext}\n\nPrevious conversation:\n${lines.join('\n\n')}`;
+                    } else {
+                      context = worldContext;
                     }
-                  } else if (sidebarTab === 'live' && game) {
-                    const summary = game.world.currentArticleSummary || '';
-                    const statements = game.world.publicStatements || [];
-                    const stmtLines = statements.map(
-                      (s: { agentName: string; statement: string }) => s.agentName + ': ' + s.statement,
-                    );
-                    context = summary + '\n' + stmtLines.join('\n');
                   } else {
-                    context = 'User was browsing the sidebar.';
+                    context = worldContext;
                   }
 
                   setAskLoading(true);
@@ -211,6 +220,7 @@ export default function SimulatorShell() {
               >
                 <input
                   type="text"
+                  aria-label="Ask about past interactions"
                   placeholder={askLoading ? 'Submitting...' : 'Ask about past interactions...'}
                   className="w-full px-3 py-2 bg-brown-700 text-white text-sm border-2 border-brown-600 rounded placeholder-brown-400 focus:outline-none focus:border-yellow-400"
                   value={askQuestion}
