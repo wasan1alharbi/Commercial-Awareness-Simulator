@@ -8,6 +8,7 @@ import { point } from '../util/types';
 import { characters } from '../../data/characters';
 import { AgentDescription } from './agentDescription';
 import { Agent } from './agent';
+import { countIdentityTerms } from './identityCheck';
 
 export const agentInputs = {
   finishRememberConversation: inputHandler({
@@ -70,6 +71,49 @@ export const agentInputs = {
       }
       if (args.activity) {
         player.activity = args.activity;
+      }
+      return null;
+    },
+  }),
+  finishDecidingOnInvite: inputHandler({
+    args: {
+      operationId: v.string(),
+      agentId,
+      conversationId,
+      accept: v.boolean(),
+    },
+    handler: (game, now, args) => {
+      const agentId = parseGameId('agents', args.agentId);
+      const agent = game.world.agents.get(agentId);
+      if (!agent) {
+        throw new Error(`Couldn't find agent: ${agentId}`);
+      }
+      const player = game.world.players.get(agent.playerId);
+      if (!player) {
+        throw new Error(`Couldn't find player: ${agent.playerId}`);
+      }
+      const conversationId = parseGameId('conversations', args.conversationId);
+      const conversation = game.world.conversations.get(conversationId);
+      if (!conversation) {
+        throw new Error(`Couldn't find conversation: ${conversationId}`);
+      }
+      if (
+        !agent.inProgressOperation ||
+        agent.inProgressOperation.operationId !== args.operationId
+      ) {
+        console.debug(`Agent ${agentId} wasn't deciding on invite ${args.operationId}`);
+        return null;
+      }
+      delete agent.inProgressOperation;
+      if (args.accept) {
+        console.log(`Agent ${player.id} accepting invite (LLM-decided)`);
+        conversation.acceptInvite(game, player);
+        if (player.pathfinding) {
+          delete player.pathfinding;
+        }
+      } else {
+        console.log(`Agent ${player.id} rejecting invite (LLM-decided)`);
+        conversation.rejectInvite(game, now, player);
       }
       return null;
     },
@@ -180,6 +224,14 @@ export const agentInputs = {
       statement: v.string(),
     },
     handler: (game, now, args) => {
+      for (const desc of game.agentDescriptions.values()) {
+        if (desc.name === args.agentName) {
+          const count = countIdentityTerms(args.statement, desc);
+          console.log(`Identity check ${args.agentName}: ${count} terms`);
+          break;
+        }
+      }
+
       const existing = game.world.publicStatements;
       let found = false;
       for (let i = 0; i < existing.length; i++) {

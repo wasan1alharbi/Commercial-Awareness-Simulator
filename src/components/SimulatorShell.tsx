@@ -7,7 +7,6 @@ import KPIDashboard from './KPIDashboard.tsx';
 import FreezeButton from './FreezeButton.tsx';
 import MusicButton from './buttons/MusicButton.tsx';
 import Button from './buttons/Button.tsx';
-import InteractButton from './buttons/InteractButton.tsx';
 import ReactModal from 'react-modal';
 import helpImg from '../../assets/help.svg';
 import { MAX_HUMAN_PLAYERS } from '../../convex/constants.ts';
@@ -17,6 +16,7 @@ import { ServerGame, useServerGame } from '../hooks/serverGame.ts';
 import PlayerDetails from './PlayerDetails.tsx';
 import { Id } from '../../convex/_generated/dataModel';
 import { Messages } from './Messages';
+import { buildAskContext } from './askContext';
 
 export default function SimulatorShell() {
   const [activeTab, setActiveTab] = useState('simulation');
@@ -26,6 +26,7 @@ export default function SimulatorShell() {
   const [askQuestion, setAskQuestion] = useState('');
   const [askLoading, setAskLoading] = useState(false);
   const [openHistoryChatId, setOpenHistoryChatId] = useState<string | null>(null);
+  const [openConversationId, setOpenConversationId] = useState<string | null>(null);
   const [practiceSessionId, setPracticeSessionId] = useState<Id<'quizSessions'> | null>(null);
 
   const convex = useConvex();
@@ -62,11 +63,11 @@ export default function SimulatorShell() {
     setSidebarTab('history');
   }
 
-  const navTabStyle = 'px-6 py-2 font-display text-2xl text-brown-300 hover:text-white';
-  const navTabActiveStyle = 'px-6 py-2 font-display text-2xl text-yellow-400 underline';
+  const navTabStyle = 'px-6 py-2 font-display text-4xl text-brown-100 font-bold hover:text-brown-100';
+  const navTabActiveStyle = 'px-6 py-2 font-display text-4xl text-blue-600 underline';
 
-  const sidebarTabStyle = 'flex-1 py-2 font-display text-sm text-brown-400 hover:text-white';
-  const sidebarTabActiveStyle = 'flex-1 py-2 font-display text-sm bg-brown-700 text-white';
+  const sidebarTabStyle = 'flex-1 py-3 font-display text-3xl font-bold text-brown-100 hover:text-brown-100';
+  const sidebarTabActiveStyle = 'flex-1 py-3 font-display text-3xl font-bold bg-brown-700 text-brown-100 underline';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100vh', overflow: 'hidden' }} className="bg-brown-900">
@@ -79,23 +80,23 @@ export default function SimulatorShell() {
         ariaHideApp={false}
       >
         <div className="font-body">
-          <h1 className="text-center text-6xl font-bold font-display game-title">Help</h1>
+          <h1 className="text-center text-8xl font-bold font-display game-title">Help</h1>
           <p>Welcome to the Commercial Awareness Simulator.</p>
-          <h2 className="text-4xl mt-4">Simulation Tab</h2>
+          <h2 className="text-6xl mt-4">Simulation Tab</h2>
           <p>Paste a real business news article and watch AI company agents react to it in real time.</p>
-          <h2 className="text-4xl mt-4">Controls</h2>
+          <h2 className="text-6xl mt-4">Controls</h2>
           <p className="mt-4">Click and drag to move around the map, scroll to zoom.</p>
           <p className="mt-4">Click on an agent to see their conversation history.</p>
           <p className="mt-4">Only {MAX_HUMAN_PLAYERS} human players allowed at a time.</p>
         </div>
       </ReactModal>
 
-      <nav className="flex items-center px-8 py-8 bg-brown-800 border-b-4 border-brown-900">
-        <h1 className="text-white font-display text-4xl mr-10">Commercial Awareness</h1>
+      <nav className="flex items-center px-8 py-8 bg-brown-800 border-b-4 border-brown-600">
+        <h1 className="text-brown-100 font-display text-6xl mr-10">Commercial Awareness</h1>
         <button onClick={showSimulation} className={activeTab === 'simulation' ? navTabActiveStyle : navTabStyle}>
           Simulation
         </button>
-        <span className="text-brown-500 mx-3 text-2xl">|</span>
+        <span className="text-brown-500 mx-3 text-4xl">|</span>
         <button onClick={showPractice} className={activeTab === 'practice' ? navTabActiveStyle : navTabStyle}>
           Practice Session
         </button>
@@ -112,9 +113,9 @@ export default function SimulatorShell() {
               <Game setSelectedElement={handleSelectElement} />
             </div>
 
-            <div style={{ width: '30%', flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }} className="bg-brown-800 border-l-8 border-brown-900 text-brown-100">
+            <div style={{ width: '30%', flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }} className="bg-brown-800 border-l-8 border-brown-600 text-brown-100">
 
-              <div className="flex border-b-4 border-brown-900">
+              <div className="flex border-b-4 border-brown-600">
                 <button onClick={showLiveTab} className={sidebarTab === 'live' ? sidebarTabActiveStyle : sidebarTabStyle}>
                   Live Interactions
                 </button>
@@ -145,15 +146,15 @@ export default function SimulatorShell() {
                       <HistoryTab worldId={worldId} openChatId={openHistoryChatId} setOpenChatId={setOpenHistoryChatId} />
                     )}
                     {sidebarTab === 'history' && !worldId && (
-                      <p className="text-brown-400 text-sm text-center mt-8">
+                      <p className="text-brown-100 font-bold text-xl text-center mt-8">
                         Loading...
                       </p>
                     )}
                     {sidebarTab === 'chats' && worldId && (
-                      <ChatsTab worldId={worldId} engineId={engineId} scrollViewRef={scrollViewRef} />
+                      <ChatsTab worldId={worldId} engineId={engineId} scrollViewRef={scrollViewRef} openConversationId={openConversationId} setOpenConversationId={setOpenConversationId} />
                     )}
                     {sidebarTab === 'chats' && !worldId && (
-                      <p className="text-brown-400 text-sm text-center mt-8">
+                      <p className="text-brown-100 font-bold text-xl text-center mt-8">
                         Loading...
                       </p>
                     )}
@@ -162,26 +163,16 @@ export default function SimulatorShell() {
               </div>
 
               <form
-                className="p-3 border-t-4 border-brown-900"
+                className="bg-white rounded m-2 p-3"
+                style={{ flexShrink: 0 }}
                 onSubmit={async (e) => {
                   e.preventDefault();
                   if (askQuestion.trim() === '' || !worldId || askLoading) return;
 
-                  let context = '';
-                  // Always build the world-state context first
-                  const summary = game?.world?.currentArticleSummary || '';
-                  const statements = game?.world?.publicStatements || [];
-                  const stmtLines = statements.map(
-                    (s: { agentName: string; statement: string }) => s.agentName + ': ' + s.statement,
-                  );
-                  const worldParts: string[] = [];
-                  if (summary) worldParts.push(`Current article: ${summary}`);
-                  if (stmtLines.length) worldParts.push(`Agent positions:\n${stmtLines.join('\n')}`);
-                  const worldContext = worldParts.length
-                    ? worldParts.join('\n\n')
-                    : 'No active simulation yet: no article has been submitted to this world. You need to submit a business article in order to ask questions about agent interactions.';
+                  const articleSummary = game?.world?.currentArticleSummary || '';
+                  const publicStatements = game?.world?.publicStatements || [];
 
-                  // If continuing a chat thread, prepend world state then append thread history
+                  let threadHistory: { question: string; answer?: string }[] | undefined;
                   if (sidebarTab === 'history' && openHistoryChatId && askChats) {
                     const openChat = askChats.find((c) => c._id === openHistoryChatId);
                     if (openChat) {
@@ -192,14 +183,25 @@ export default function SimulatorShell() {
                         return false;
                       });
                       threadChats.sort((a, b) => a.createdAt - b.createdAt);
-                      const lines = threadChats.map((c) => 'Q: ' + c.question + '\nA: ' + (c.answer || '(pending)'));
-                      context = `${worldContext}\n\nPrevious conversation:\n${lines.join('\n\n')}`;
-                    } else {
-                      context = worldContext;
+                      threadHistory = threadChats.map((c) => ({ question: c.question, answer: c.answer }));
                     }
-                  } else {
-                    context = worldContext;
                   }
+
+                  let conversationMessages: { authorName: string; text: string }[] | undefined;
+                  if (openConversationId && worldId) {
+                    const msgs = await convex.query(api.messages.listMessages, {
+                      worldId,
+                      conversationId: openConversationId as any,
+                    });
+                    conversationMessages = msgs.map((m: any) => ({ authorName: m.authorName, text: m.text }));
+                  }
+
+                  const context = buildAskContext({
+                    articleSummary,
+                    publicStatements,
+                    conversationMessages,
+                    threadHistory,
+                  });
 
                   setAskLoading(true);
                   try {
@@ -222,7 +224,7 @@ export default function SimulatorShell() {
                   type="text"
                   aria-label="Ask about past interactions"
                   placeholder={askLoading ? 'Submitting...' : 'Ask about past interactions...'}
-                  className="w-full px-3 py-2 bg-brown-700 text-white text-sm border-2 border-brown-600 rounded placeholder-brown-400 focus:outline-none focus:border-yellow-400"
+                  className="w-full px-3 py-2 bg-white text-black text-xl border-2 border-gray-300 rounded placeholder-gray-500 focus:outline-none focus:border-blue-600"
                   value={askQuestion}
                   onChange={(e) => setAskQuestion(e.target.value)}
                   disabled={askLoading}
@@ -240,7 +242,7 @@ export default function SimulatorShell() {
             <QuizDashboard worldId={worldId} onActiveSessionChange={setPracticeSessionId} />
           </div>
           {practiceSessionId && (
-            <div style={{ width: '30%', flexShrink: 0, overflow: 'hidden' }} className="bg-brown-800 border-l-8 border-brown-900">
+            <div style={{ width: '30%', flexShrink: 0, overflow: 'hidden' }} className="bg-brown-800 border-l-8 border-brown-600">
               <KPIDashboard sessionId={practiceSessionId} />
             </div>
           )}
@@ -248,16 +250,15 @@ export default function SimulatorShell() {
       )}
 
       {activeTab === 'practice' && !worldId && (
-        <div className="flex items-center justify-center flex-1 text-brown-400 font-body text-sm">
+        <div className="flex items-center justify-center flex-1 text-brown-100 font-bold font-body text-xl">
           Loading...
         </div>
       )}
 
-      <footer className="flex items-center gap-3 px-6 py-3 bg-brown-800 border-t-4 border-brown-900 flex-wrap">
+      <footer className="flex items-center gap-3 px-6 py-3 bg-brown-800 border-t-4 border-brown-600 flex-wrap">
         <div className="flex gap-4 pointer-events-auto">
           <FreezeButton />
           <MusicButton />
-          <InteractButton />
           <Button imgUrl={helpImg} onClick={() => setHelpOpen(true)}>Help</Button>
         </div>
       </footer>
@@ -269,7 +270,7 @@ export default function SimulatorShell() {
 function LiveTab({ game }: { game: ServerGame | undefined }) {
   if (!game) {
     return (
-      <p className="text-brown-400 text-sm text-center mt-8">
+      <p className="text-brown-100 font-bold text-2xl text-center mt-8">
         Loading world data...
       </p>
     );
@@ -280,7 +281,7 @@ function LiveTab({ game }: { game: ServerGame | undefined }) {
 
   if (!articleSummary) {
     return (
-      <p className="text-brown-400 text-sm text-center mt-8">
+      <p className="text-brown-100 font-bold text-2xl text-center mt-8">
         Submit a business article above to see the live broadcast and agent reactions here.
       </p>
     );
@@ -290,18 +291,18 @@ function LiveTab({ game }: { game: ServerGame | undefined }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="bg-brown-700 rounded px-3 py-3 border-l-4 border-yellow-400">
-        <span className="font-display text-xs text-yellow-400 uppercase tracking-wide">Broadcast</span>
-        <p className="text-brown-100 text-sm mt-1">{articleSummary}</p>
+      <div className="bg-brown-700 rounded px-3 py-3 border-l-4 border-blue-600">
+        <span className="font-display text-3xl text-brown-100 font-bold uppercase tracking-wide">Broadcast</span>
+        <p className="text-brown-100 text-2xl mt-1">{articleSummary}</p>
       </div>
 
       {sortedStatements.length > 0 && (
         <div>
-          <span className="font-display text-xs text-brown-400 uppercase tracking-wide">Agent Reactions</span>
+          <span className="font-display text-3xl text-brown-100 font-bold uppercase tracking-wide">Agent Reactions</span>
           <ul className="flex flex-col gap-2 mt-2">
             {sortedStatements.map((stmt, i) => (
-              <li key={`${stmt.agentName}-${i}`} className="bg-brown-700 rounded px-3 py-2 text-sm">
-                <span className="text-yellow-300 font-display text-xs">{stmt.agentName}</span>
+              <li key={`${stmt.agentName}-${i}`} className="bg-brown-700 rounded px-3 py-2 text-2xl">
+                <span className="text-brown-100 font-bold font-display text-2xl">{stmt.agentName}</span>
                 <p className="text-brown-100 mt-1">{stmt.statement}</p>
               </li>
             ))}
@@ -310,7 +311,7 @@ function LiveTab({ game }: { game: ServerGame | undefined }) {
       )}
 
       {sortedStatements.length === 0 && (
-        <p className="text-brown-400 text-sm text-center">
+        <p className="text-brown-100 font-bold text-2xl text-center">
           Agents are processing the article... reactions will appear shortly.
         </p>
       )}
@@ -323,7 +324,7 @@ function HistoryTab({ worldId, openChatId, setOpenChatId }: { worldId: Id<'world
 
   if (chats === undefined) {
     return (
-      <p className="text-brown-400 text-sm text-center mt-8">
+      <p className="text-brown-100 font-bold text-2xl text-center mt-8">
         Loading...
       </p>
     );
@@ -344,14 +345,14 @@ function HistoryTab({ worldId, openChatId, setOpenChatId }: { worldId: Id<'world
       <>
         <div className="flex justify-between items-center mb-2">
           <button
-            className="text-xs text-brown-400 hover:text-white"
+            className="text-xl text-brown-100 font-bold hover:text-brown-100"
             onClick={() => setOpenChatId(null)}
           >
             ← Back to list
           </button>
         </div>
-        <div className="chats text-base sm:text-sm">
-          <div className="bg-brown-200 text-black p-2">
+        <div className="text-3xl sm:text-2xl">
+          <div className="text-brown-100 p-3">
             {allChatsInThread.map((chat) => (
               <div key={chat._id}>
                 <div className="leading-tight mb-4">
@@ -392,7 +393,7 @@ function HistoryTab({ worldId, openChatId, setOpenChatId }: { worldId: Id<'world
 
   if (chats.length === 0) {
     return (
-      <p className="text-brown-400 text-sm text-center mt-8">
+      <p className="text-brown-100 font-bold text-2xl text-center mt-8">
         No questions asked yet. Use the input below to ask about agent interactions.
       </p>
     );
@@ -409,13 +410,13 @@ function HistoryTab({ worldId, openChatId, setOpenChatId }: { worldId: Id<'world
             onClick={() => setOpenChatId(chat._id)}
           >
             <div className="flex justify-between items-center">
-              <p className="text-brown-100 text-sm truncate flex-1 mr-2">{chat.question}</p>
-              <time className="text-xs text-brown-400 whitespace-nowrap" dateTime={chat.createdAt.toString()}>
+              <p className="text-brown-100 text-2xl truncate flex-1 mr-2">{chat.question}</p>
+              <time className="text-xl text-brown-100 font-bold whitespace-nowrap" dateTime={chat.createdAt.toString()}>
                 {timeLabel}
               </time>
             </div>
             {!chat.answer && (
-              <p className="text-yellow-400 text-xs mt-1">Thinking...</p>
+              <p className="text-blue-600 text-xl mt-1">Thinking...</p>
             )}
           </div>
         );
@@ -424,20 +425,25 @@ function HistoryTab({ worldId, openChatId, setOpenChatId }: { worldId: Id<'world
   );
 }
 
-function ChatsTab({ worldId, engineId, scrollViewRef }: { worldId: Id<'worlds'>; engineId?: Id<'engines'>; scrollViewRef: React.RefObject<HTMLDivElement> }) {
+function ChatsTab({ worldId, engineId, scrollViewRef, openConversationId, setOpenConversationId }: {
+  worldId: Id<'worlds'>;
+  engineId?: Id<'engines'>;
+  scrollViewRef: React.RefObject<HTMLDivElement>;
+  openConversationId: string | null;
+  setOpenConversationId: (id: string | null) => void;
+}) {
   const archivedConversations = useQuery(api.simulator.index.listArchivedConversations, { worldId });
-  const [openConversationId, setOpenConversationId] = useState<string | null>(null);
 
   if (archivedConversations === undefined) {
     return (
-      <p className="text-brown-400 text-sm text-center mt-8">
+      <p className="text-brown-100 font-bold text-2xl text-center mt-8">
         Loading...
       </p>
     );
   }
 
   const openConversation = openConversationId
-    ? archivedConversations.find((c) => c._id === openConversationId)
+    ? archivedConversations.find((c) => c.id === openConversationId)
     : null;
 
   if (openConversation && engineId) {
@@ -446,13 +452,13 @@ function ChatsTab({ worldId, engineId, scrollViewRef }: { worldId: Id<'worlds'>;
       <>
         <div className="flex justify-between items-center mb-2">
           <button
-            className="text-xs text-brown-400 hover:text-white"
+            className="text-xl text-brown-100 font-bold hover:text-brown-100"
             onClick={() => setOpenConversationId(null)}
           >
             ← Back to list
           </button>
         </div>
-        <p className="text-yellow-300 font-display text-sm mb-2">{participantNames}</p>
+        <p className="text-brown-100 font-bold font-display text-3xl mb-2">{participantNames}</p>
         <Messages
           worldId={worldId}
           engineId={engineId}
@@ -466,7 +472,7 @@ function ChatsTab({ worldId, engineId, scrollViewRef }: { worldId: Id<'worlds'>;
 
   if (archivedConversations.length === 0) {
     return (
-      <p className="text-brown-400 text-sm text-center mt-8">
+      <p className="text-brown-100 font-bold text-2xl text-center mt-8">
         No agent conversations yet. Agents will start chatting after you submit an article.
       </p>
     );
@@ -489,13 +495,13 @@ function ChatsTab({ worldId, engineId, scrollViewRef }: { worldId: Id<'worlds'>;
           <div
             key={conv._id}
             className="bg-brown-700 rounded px-3 py-2 cursor-pointer hover:bg-brown-600"
-            onClick={() => setOpenConversationId(conv._id)}
+            onClick={() => setOpenConversationId(conv.id)}
           >
             <div className="flex justify-between items-center">
-              <p className="text-brown-100 text-sm truncate flex-1 mr-2">{participantNames}</p>
-              <span className="text-xs text-brown-400 whitespace-nowrap">{timeAgo}</span>
+              <p className="text-brown-100 text-2xl truncate flex-1 mr-2">{participantNames}</p>
+              <span className="text-xl text-brown-100 font-bold whitespace-nowrap">{timeAgo}</span>
             </div>
-            <p className="text-brown-400 text-xs mt-1">{conv.numMessages} messages</p>
+            <p className="text-brown-100 font-bold text-xl mt-1">{conv.numMessages} messages</p>
           </div>
         );
       })}

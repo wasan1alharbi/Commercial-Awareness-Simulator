@@ -12,7 +12,7 @@ export default function Button(props: {
   return (
     <a
       className={clsx(
-        'button text-white shadow-solid text-xl pointer-events-auto',
+        'button text-brown-100 shadow-solid text-4xl pointer-events-auto',
         props.className,
       )}
       href={props.href}

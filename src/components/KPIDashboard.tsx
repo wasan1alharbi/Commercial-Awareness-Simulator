@@ -9,7 +9,7 @@ export default function KPIDashboard({ sessionId }: { sessionId: Id<'quizSession
   if (kpiSnapshot === undefined) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="font-body text-brown-400 text-sm">Loading KPIs...</p>
+        <p className="font-body text-brown-400 text-xl">Loading KPIs...</p>
       </div>
     );
   }
@@ -17,7 +17,7 @@ export default function KPIDashboard({ sessionId }: { sessionId: Id<'quizSession
   if (kpiSnapshot === null) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="font-body text-brown-400 text-sm">No KPI data yet.</p>
+        <p className="font-body text-brown-400 text-xl">No KPI data yet.</p>
       </div>
     );
   }
@@ -32,7 +32,7 @@ export default function KPIDashboard({ sessionId }: { sessionId: Id<'quizSession
 
   return (
     <div className="flex flex-col items-center justify-center h-full px-6">
-      <h2 className="font-display text-2xl text-white mb-6">KPI Dashboard</h2>
+      <h2 className="font-display text-4xl text-brown-100 mb-6">KPI Dashboard</h2>
       <div className="w-full" aria-label={'KPI scores: ' + kpis.map((d) => d.name + ' ' + d.value).join(', ')} role="img">
         <ResponsiveContainer width="100%" height={400}>
           <BarChart data={kpis} layout="vertical" margin={{ top: 10, right: 40, bottom: 10, left: 10 }}>

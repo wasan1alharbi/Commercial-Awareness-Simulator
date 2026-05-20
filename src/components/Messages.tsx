@@ -99,7 +99,7 @@ export function Messages({
         membershipNodes.push({
           node: (
             <div key={`joined-${playerId}`} className="leading-tight mb-6">
-              <p className="text-brown-700 text-center">{playerName} joined the conversation.</p>
+              <p className="text-blue-900 font-bold text-center">{playerName} joined the conversation.</p>
             </div>
           ),
           time: started,
@@ -113,7 +113,7 @@ export function Messages({
       membershipNodes.push({
         node: (
           <div key={`joined-${participant.playerId}`} className="leading-tight mb-6">
-            <p className="text-brown-700 text-center">{playerName} joined the conversation.</p>
+            <p className="text-blue-900 font-bold text-center">{playerName} joined the conversation.</p>
           </div>
         ),
         time: started,
@@ -122,7 +122,7 @@ export function Messages({
       membershipNodes.push({
         node: (
           <div key={`left-${participant.playerId}`} className="leading-tight mb-6">
-            <p className="text-brown-700 text-center">{playerName} left the conversation.</p>
+            <p className="text-blue-900 font-bold text-center">{playerName} left the conversation.</p>
           </div>
         ),
         // Always sort all "left" messages after the last message.
@@ -134,8 +134,8 @@ export function Messages({
   const nodes = [...messageNodes, ...membershipNodes];
   nodes.sort((a, b) => a.time - b.time);
   return (
-    <div className="chats text-base sm:text-sm">
-      <div className="bg-brown-200 text-black p-2">
+    <div className="text-3xl sm:text-2xl">
+      <div className="text-brown-100 p-3">
         {nodes.length > 0 && nodes.map((n) => n.node)}
         {currentlyTyping && currentlyTyping.playerId !== humanPlayerId && (
           <div key="typing" className="leading-tight mb-6">

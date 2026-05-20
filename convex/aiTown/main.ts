@@ -121,6 +121,7 @@ export const runStep = internalAction({
         }
         if (e.data.kind === 'generationNumber') {
           console.debug(`Generation number mismatch: ${e.message}`);
+          console.log(`Generation number mismatch in world ${args.worldId}`);
           return;
         }
       }

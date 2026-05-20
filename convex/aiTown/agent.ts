@@ -8,10 +8,7 @@ import {
   AWKWARD_CONVERSATION_TIMEOUT,
   CONVERSATION_COOLDOWN,
   CONVERSATION_DISTANCE,
-  INVITE_ACCEPT_PROBABILITY,
   INVITE_TIMEOUT,
-  MAX_CONVERSATION_DURATION,
-  MAX_CONVERSATION_MESSAGES,
   MESSAGE_COOLDOWN,
   MIDPOINT_THRESHOLD,
   PLAYER_CONVERSATION_COOLDOWN,
@@ -124,18 +121,15 @@ export class Agent {
       )!;
       const otherPlayer = game.world.players.get(otherPlayerId)!;
       if (member.status.kind === 'invited') {
-        // Accept a conversation with another agent with some probability and with
-        // a human unconditionally.
-        if (otherPlayer.human || Math.random() < INVITE_ACCEPT_PROBABILITY) {
-          console.log(`Agent ${player.id} accepting invite from ${otherPlayer.id}`);
-          conversation.acceptInvite(game, player);
-          // Stop moving so we can start walking towards the other player.
-          if (player.pathfinding) {
-            delete player.pathfinding;
-          }
-        } else {
-          console.log(`Agent ${player.id} rejecting invite from ${otherPlayer.id}`);
-          conversation.rejectInvite(game, now, player);
+        // Ask the LLM if the agent wants to accept the invite (humans and other agents alike).
+        if (!this.inProgressOperation) {
+          this.startOperation(game, now, 'agentDecideOnInvite', {
+            worldId: game.worldId,
+            agentId: this.id,
+            conversationId: conversation.id,
+            playerId: player.id,
+            otherPlayerId: otherPlayer.id,
+          });
         }
         return;
       }
@@ -202,23 +196,6 @@ export class Agent {
             // Wait on the other player to say something up to the awkward deadline.
             return;
           }
-        }
-        // See if the conversation has been going on too long and decide to leave.
-        const tooLongDeadline = started + MAX_CONVERSATION_DURATION;
-        if (tooLongDeadline < now || conversation.numMessages > MAX_CONVERSATION_MESSAGES) {
-          console.log(`${player.id} leaving conversation with ${otherPlayer.id}.`);
-          const messageUuid = crypto.randomUUID();
-          conversation.setIsTyping(now, player, messageUuid);
-          this.startOperation(game, now, 'agentGenerateMessage', {
-            worldId: game.worldId,
-            playerId: player.id,
-            agentId: this.id,
-            conversationId: conversation.id,
-            otherPlayerId: otherPlayer.id,
-            messageUuid,
-            type: 'leave',
-          });
-          return;
         }
         // Wait for the awkward deadline if we sent the last message.
         if (conversation.lastMessage.author === player.id) {
@@ -314,6 +291,9 @@ export async function runAgentOperation(ctx: MutationCtx, operation: string, arg
       break;
     case 'agentDoSomething':
       reference = internal.aiTown.agentOperations.agentDoSomething;
+      break;
+    case 'agentDecideOnInvite':
+      reference = internal.aiTown.agentOperations.agentDecideOnInvite;
       break;
     case 'agentProcessWorldContext':
       reference = internal.simulator.agentWorldContext.agentProcessWorldContext;

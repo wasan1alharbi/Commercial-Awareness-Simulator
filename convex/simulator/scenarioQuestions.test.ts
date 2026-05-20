@@ -68,7 +68,7 @@ jest.unstable_mockModule('convex/values', () => {
 let generateScenarioQuestions: any;
 
 beforeAll(async () => {
-  const mod = await import('./index');
+  const mod = await import('./index') as any;
   generateScenarioQuestions = mod.generateScenarioQuestions;
 });
 

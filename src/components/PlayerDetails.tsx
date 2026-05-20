@@ -55,7 +55,7 @@ export default function PlayerDetails({
 
   if (!playerId) {
     return (
-      <div className="h-full text-xl flex text-center items-center p-4">
+      <div className="h-full text-5xl flex text-center items-center p-4">
         Click on an agent on the map to see chat history.
       </div>
     );
@@ -64,7 +64,7 @@ export default function PlayerDetails({
     return null;
   }
   const isMe = humanPlayer && player.id === humanPlayer.id;
-  const canInvite = !isMe && !playerConversation && humanPlayer && !humanConversation;
+  const canInvite = !isMe && humanPlayer && !humanConversation;
   const sameConversation =
     !isMe &&
     humanPlayer &&
@@ -134,24 +134,24 @@ export default function PlayerDetails({
   return (
     <>
       <div className="flex gap-4">
-        <div className="box w-3/4 sm:w-full mr-auto">
-          <h2 className="bg-brown-700 p-2 font-display text-2xl sm:text-4xl tracking-wider shadow-solid text-center">
+        <div className="w-3/4 sm:w-full mr-auto">
+          <h2 className="p-2 font-display font-bold text-5xl sm:text-7xl text-center text-brown-100">
             {playerDescription?.name}
           </h2>
         </div>
-        <a
-          className="button text-white shadow-solid text-2xl cursor-pointer pointer-events-auto"
+        <button
+          type="button"
+          aria-label="Close"
+          className="text-brown-100 text-7xl font-bold leading-none cursor-pointer pointer-events-auto px-4 py-2"
           onClick={() => setSelectedElement(undefined)}
         >
-          <h2 className="h-full bg-clay-700">
-            <img className="w-4 h-4 sm:w-5 sm:h-5" src={closeImg} alt="Close" />
-          </h2>
-        </a>
+          ×
+        </button>
       </div>
       {canInvite && (
         <a
           className={
-            'mt-6 button text-white shadow-solid text-xl cursor-pointer pointer-events-auto' +
+            'mt-6 button text-brown-100 shadow-solid text-5xl cursor-pointer pointer-events-auto' +
             pendingSuffix('startConversation')
           }
           onClick={onStartConversation}
@@ -162,14 +162,14 @@ export default function PlayerDetails({
         </a>
       )}
       {waitingForAccept && (
-        <a className="mt-6 button text-white shadow-solid text-xl cursor-pointer pointer-events-auto opacity-50">
+        <a className="mt-6 button text-brown-100 shadow-solid text-5xl cursor-pointer pointer-events-auto opacity-50">
           <div className="h-full bg-clay-700 text-center">
             <span>Waiting for accept...</span>
           </div>
         </a>
       )}
       {waitingForNearby && (
-        <a className="mt-6 button text-white shadow-solid text-xl cursor-pointer pointer-events-auto opacity-50">
+        <a className="mt-6 button text-brown-100 shadow-solid text-5xl cursor-pointer pointer-events-auto opacity-50">
           <div className="h-full bg-clay-700 text-center">
             <span>Walking over...</span>
           </div>
@@ -178,7 +178,7 @@ export default function PlayerDetails({
       {inConversationWithMe && (
         <a
           className={
-            'mt-6 button text-white shadow-solid text-xl cursor-pointer pointer-events-auto' +
+            'mt-6 button text-brown-100 shadow-solid text-5xl cursor-pointer pointer-events-auto' +
             pendingSuffix('leaveConversation')
           }
           onClick={onLeaveConversation}
@@ -192,7 +192,7 @@ export default function PlayerDetails({
         <>
           <a
             className={
-              'mt-6 button text-white shadow-solid text-xl cursor-pointer pointer-events-auto' +
+              'mt-6 button text-brown-100 shadow-solid text-5xl cursor-pointer pointer-events-auto' +
               pendingSuffix('acceptInvite')
             }
             onClick={onAcceptInvite}
@@ -203,7 +203,7 @@ export default function PlayerDetails({
           </a>
           <a
             className={
-              'mt-6 button text-white shadow-solid text-xl cursor-pointer pointer-events-auto' +
+              'mt-6 button text-brown-100 shadow-solid text-5xl cursor-pointer pointer-events-auto' +
               pendingSuffix('rejectInvite')
             }
             onClick={onRejectInvite}
@@ -216,13 +216,13 @@ export default function PlayerDetails({
       )}
       {!playerConversation && player.activity && player.activity.until > Date.now() && (
         <div className="box flex-grow mt-6">
-          <h2 className="bg-brown-700 text-base sm:text-lg text-center">
+          <h2 className="bg-brown-700 text-3xl sm:text-4xl text-center">
             {player.activity.description}
           </h2>
         </div>
       )}
-      <div className="desc my-6">
-        <p className="leading-tight -m-4 bg-brown-700 text-base sm:text-sm">
+      <div className="my-6">
+        <p className="leading-tight text-3xl sm:text-2xl text-brown-100">
           {!isMe && playerDescription?.description}
           {isMe && <i>This is you!</i>}
           {!isMe && inConversationWithMe && (
@@ -246,7 +246,7 @@ export default function PlayerDetails({
       {!playerConversation && previousConversation && (
         <>
           <div className="box flex-grow">
-            <h2 className="bg-brown-700 text-lg text-center">Previous conversation</h2>
+            <h2 className="bg-brown-700 text-4xl text-center">Previous conversation</h2>
           </div>
           <Messages
             worldId={worldId}

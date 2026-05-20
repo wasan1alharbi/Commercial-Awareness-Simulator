@@ -109,4 +109,19 @@ describe('gateAgentPrompt', () => {
     expect(systemMsg.content).toContain('commercial news validator');
     expect(systemMsg.content).toContain('isValid, rejectionReason, companies, summary');
   });
+
+  // check it returns the companies the LLM picked out
+  test('test_extracts_expected_company_names', async () => {
+    const goodResponse = JSON.stringify({
+      isValid: true,
+      rejectionReason: null,
+      companies: ['Apple', 'Microsoft', 'OpenAI'],
+      summary: 'Apple, Microsoft and OpenAI announce joint AI safety initiative.',
+    });
+    mockChatCompletion.mockResolvedValueOnce({ content: goodResponse });
+
+    const result = await gateAgentPrompt('Apple, Microsoft and OpenAI announced a joint AI safety initiative today...');
+
+    expect(result.companies).toEqual(['Apple', 'Microsoft', 'OpenAI']);
+  });
 });

@@ -139,6 +139,32 @@ export const joinWorld = mutation({
   },
 });
 
+export const purgeHumanFromDefaultWorld = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const worldStatus = await ctx.db
+      .query('worldStatus')
+      .filter((q) => q.eq(q.field('isDefault'), true))
+      .first();
+    if (!worldStatus) {
+      console.log('No default world found');
+      return;
+    }
+    const world = await ctx.db.get(worldStatus.worldId);
+    if (!world) {
+      console.log('Default world record missing');
+      return;
+    }
+    const human = world.players.find((p) => p.human);
+    if (!human) {
+      console.log('No human player in world');
+      return;
+    }
+    await insertInput(ctx, worldStatus.worldId, 'leave', { playerId: human.id });
+    console.log(`Removed human player ${human.id}`);
+  },
+});
+
 export const leaveWorld = mutation({
   args: {
     worldId: v.id('worlds'),

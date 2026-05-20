@@ -31,7 +31,7 @@ function wordCountsForCosine(text: string): Map<string, number> {
   return counts;
 }
 
-function cosineSimilarityOfWordBags(left: string, right: string): number {
+export function cosineSimilarityOfWordBags(left: string, right: string): number {
   const ca = wordCountsForCosine(left);
   const cb = wordCountsForCosine(right);
   let sumLeft = 0;
@@ -55,7 +55,7 @@ function cosineSimilarityOfWordBags(left: string, right: string): number {
   return dot / (Math.sqrt(sumLeft) * Math.sqrt(sumRight));
 }
 
-function isSameArticleForDuplicateCheck(a: string, b: string): boolean {
+export function isSameArticleForDuplicateCheck(a: string, b: string): boolean {
   const one = normalizeArticleText(a);
   const two = normalizeArticleText(b);
   if (one === two) {
@@ -66,6 +66,25 @@ function isSameArticleForDuplicateCheck(a: string, b: string): boolean {
   }
   return cosineSimilarityOfWordBags(one, two) >= COSINE_DUPLICATE_CUTOFF;
 }
+
+export const logArticleSubmission = internalMutation({
+  args: {
+    worldId: v.id('worlds'),
+    submittedAt: v.number(),
+    charsIn: v.number(),
+    outcome: v.union(v.literal('accepted'), v.literal('rejected')),
+    rejectionStage: v.optional(
+      v.union(v.literal('too_short'), v.literal('duplicate'), v.literal('gate')),
+    ),
+    rejectionReason: v.optional(v.string()),
+    articleId: v.optional(v.id('articles')),
+    extractedCompaniesCount: v.optional(v.number()),
+    summaryChars: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert('articleSubmissionLog', args);
+  },
+});
 
 export const insertArticle = internalMutation({
   args: {
@@ -218,8 +237,20 @@ export const submitArticle = action({
       throw new Error('World ' + args.worldId + ' not found.');
     }
 
+    const submittedAt = Date.now();
+    const charsIn = args.text.length;
+
     if (args.text.length < 50) {
-      return { success: false, rejectionReason: 'Article text must be at least 50 characters.' };
+      const reason = 'Article text must be at least 50 characters.';
+      await ctx.runMutation(internal.simulator.index.logArticleSubmission, {
+        worldId: args.worldId,
+        submittedAt,
+        charsIn,
+        outcome: 'rejected',
+        rejectionStage: 'too_short',
+        rejectionReason: reason,
+      });
+      return { success: false, rejectionReason: reason };
     }
 
     const alreadyHaveThis = await ctx.runQuery(internal.simulator.index.hasSameArticleTextAlready, {
@@ -227,13 +258,31 @@ export const submitArticle = action({
       text: args.text,
     });
     if (alreadyHaveThis) {
-      return { success: false, rejectionReason: 'You already submitted this article.' };
+      const reason = 'You already submitted this article.';
+      await ctx.runMutation(internal.simulator.index.logArticleSubmission, {
+        worldId: args.worldId,
+        submittedAt,
+        charsIn,
+        outcome: 'rejected',
+        rejectionStage: 'duplicate',
+        rejectionReason: reason,
+      });
+      return { success: false, rejectionReason: reason };
     }
 
     const result = await gateAgentPrompt(args.text);
 
     if (!result.isValid) {
-      return { success: false, rejectionReason: result.rejectionReason ?? 'Not valid business news.' };
+      const reason = result.rejectionReason ?? 'Not valid business news.';
+      await ctx.runMutation(internal.simulator.index.logArticleSubmission, {
+        worldId: args.worldId,
+        submittedAt,
+        charsIn,
+        outcome: 'rejected',
+        rejectionStage: 'gate',
+        rejectionReason: reason,
+      });
+      return { success: false, rejectionReason: reason };
     }
 
     const articleId = await ctx.runMutation(internal.simulator.index.insertArticle, {
@@ -241,6 +290,16 @@ export const submitArticle = action({
       rawText: args.text,
       summary: result.summary,
       extractedCompanies: result.companies,
+    });
+
+    await ctx.runMutation(internal.simulator.index.logArticleSubmission, {
+      worldId: args.worldId,
+      submittedAt,
+      charsIn,
+      outcome: 'accepted',
+      articleId,
+      extractedCompaniesCount: result.companies.length,
+      summaryChars: result.summary.length,
     });
 
     await ctx.runMutation(internal.simulator.index.updateWorldContextViaInput, {
@@ -306,6 +365,10 @@ export const submitArticle = action({
         alreadyHadAgents.push(compName);
       }
     }
+
+    console.log(
+      `Article ${articleId}: spawned ${newSpawns.length}, patched ${alreadyHadAgents.length}`,
+    );
 
     return {
       success: true,
@@ -382,9 +445,13 @@ export const answerAskQuestion = internalAction({
     }
 
     const systemPrompt =
-      'You are a helpful assistant. The user is looking at this context from a business simulation: ' +
+      'You are an analyst helping a student understand a live multi-agent business simulation. ' +
+      "Use the simulation state below to answer the user's question with specifics — name companies, " +
+      'reference the article, point at agent statements. Do NOT ask the user to clarify if the answer ' +
+      'is in the state below; answer directly. If the state is empty, tell the user no article has ' +
+      'been submitted yet.\n\n=== SIMULATION STATE ===\n' +
       askChat.context +
-      '. Answer their question concisely.';
+      '\n=== END STATE ===';
 
     const { content } = await chatCompletion({
       messages: [
@@ -425,6 +492,8 @@ export const insertQuizSession = internalMutation({
         correctLabel: v.optional(v.string()),
       }),
     ),
+    caseText: v.optional(v.string()),
+    kpiRationale: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert('quizSessions', {
@@ -437,26 +506,171 @@ export const insertQuizSession = internalMutation({
       answers: [],
       status: 'active',
       createdAt: Date.now(),
+      caseText: args.caseText,
+      kpiRationale: args.kpiRationale,
     });
   },
 });
 
 export const insertInitialKpiSnapshot = internalMutation({
-  args: { sessionId: v.id('quizSessions') },
+  args: {
+    sessionId: v.id('quizSessions'),
+    profit: v.optional(v.number()),
+    marketShare: v.optional(v.number()),
+    liquidity: v.optional(v.number()),
+    trust: v.optional(v.number()),
+    compliance: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
     return await ctx.db.insert('kpiSnapshots', {
       sessionId: args.sessionId,
-      profit: 0,
-      marketShare: 0,
-      liquidity: 0,
-      trust: 0,
-      compliance: 0,
+      profit: args.profit || 0,
+      marketShare: args.marketShare || 0,
+      liquidity: args.liquidity || 0,
+      trust: args.trust || 0,
+      compliance: args.compliance || 0,
       updatedAt: Date.now(),
     });
   },
 });
 
-async function generateScenarioQuestions(
+export async function generateCaseText(articleSummary: string): Promise<string> {
+  const systemPrompt = `You are a world renowned educator specialised in teaching students decision making and commercial awareness. You are now tasked with generating a case.
+
+Student goals: Learn commercial awareness, Have a risk free environment where they can clearly understand the connections between different KPIs and practise business judgment.
+
+Your job is to create a short, realistic business case for a student practice session. The case must support later scenario-based questions about business judgment, trade-offs, and consequences that the system will test the student on.
+
+Write the case using these rules:
+
+- Base it on the provided news summary but do not copy it word for word. Just the general type of scenario affecting a hypothetical company
+- Create a fictional company in a close situation.
+- Write 300 to 400 words.
+- Make the case feel commercially realistic, specific, and relevant to recent news you might be aware of.
+- Present a clear business dilemma with competing priorities, Nothing too generic or too difficult
+- Include enough detail for later questions about short-term versus long-term consequences.
+- Do not make the case purely descriptive. It must contain tension, uncertainty, and a decision context.
+- Do not mention that the company is fictional.
+- Do not pick company names that the student would not take seriously such as "restaurants restaurants" or big media media company or company X, etc. Pick one that sounds real but is fake.
+- Do not include headings, bullet points, commentary, or any text outside the JSON.
+- Naturally explain inside the case what these five KPIs mean for this business: profit, marketShare, liquidity, trust, compliance. Weave it into the writing, not as a list.
+- If any KPI is weak in the company's current position, the case must explain why.
+- If there is any future scenario change or historical context relevant to a KPI, mention it in the case.
+
+Return only valid JSON in exactly this format:
+
+{
+  "caseText": "..."
+}`;
+
+  const userPrompt = 'Article summary: ' + articleSummary;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { content } = await chatCompletion({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.6,
+      });
+      const raw = (content as string).trim();
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+      const parsed = JSON.parse(cleaned);
+      if (typeof parsed.caseText !== 'string') {
+        throw new Error('Missing caseText in case generator response');
+      }
+      return parsed.caseText;
+    } catch (err) {
+      if (attempt === 2) throw err;
+    }
+  }
+  throw new Error('generateCaseText failed after 3 attempts');
+}
+
+export async function assignStartingKPIs(caseText: string): Promise<{
+  initialKPIs: { profit: number; marketShare: number; liquidity: number; trust: number; compliance: number };
+  kpiRationale: string;
+}> {
+  const systemPrompt = `You are a business analyst assigning starting KPI values for a student practice case. Read the case carefully and assign integers from -100 to 100 for these five KPIs: profit, marketShare, liquidity, trust, compliance.
+
+KPI requirements:
+
+- Each KPI must be an integer from -100 to 100.
+- The KPI profile must be plausible given the case.
+- Do not make all KPIs uniformly high or uniformly low unless the case clearly justifies it. It has to make sense!
+- Prefer mixed KPI profiles when the situation involves trade-offs.
+- The KPI values should represent the company's starting position before the student makes any decision.
+
+Rationale rules:
+
+- Write 1 to 2 concise sentences explaining why the starting KPI values were chosen.
+- The rationale must refer to the actual case details!!!
+- The rationale must explain the main causal logic behind the KPI profile!!!
+
+Return only valid JSON in exactly this format:
+
+{
+  "initialKPIs": {
+    "profit": 0,
+    "marketShare": 0,
+    "liquidity": 0,
+    "trust": 0,
+    "compliance": 0
+  },
+  "kpiRationale": "..."
+}`;
+
+  const userPrompt = 'Business case:\n' + caseText;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { content } = await chatCompletion({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.1,
+      });
+      const raw = (content as string).trim();
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+      const parsed = JSON.parse(cleaned);
+      if (
+        typeof parsed.kpiRationale !== 'string' ||
+        !parsed.initialKPIs ||
+        typeof parsed.initialKPIs.profit !== 'number' ||
+        typeof parsed.initialKPIs.marketShare !== 'number' ||
+        typeof parsed.initialKPIs.liquidity !== 'number' ||
+        typeof parsed.initialKPIs.trust !== 'number' ||
+        typeof parsed.initialKPIs.compliance !== 'number'
+      ) {
+        throw new Error('Missing fields in KPI assigner response');
+      }
+      return parsed;
+    } catch (err) {
+      if (attempt === 2) throw err;
+    }
+  }
+  throw new Error('assignStartingKPIs failed after 3 attempts');
+}
+
+export async function generateCaseAndStartingKPIs(
+  articleSummary: string,
+): Promise<{
+  caseText: string;
+  initialKPIs: { profit: number; marketShare: number; liquidity: number; trust: number; compliance: number };
+  kpiRationale: string;
+}> {
+  const caseText = await generateCaseText(articleSummary);
+  const kpiResult = await assignStartingKPIs(caseText);
+  return {
+    caseText: caseText,
+    initialKPIs: kpiResult.initialKPIs,
+    kpiRationale: kpiResult.kpiRationale,
+  };
+}
+
+export async function generateScenarioQuestions(
   articleSummary: string,
   difficulty: string,
   count: number,
@@ -490,7 +704,7 @@ async function generateScenarioQuestions(
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        temperature: 0.7,
+        temperature: 0.6,
       });
       const raw = (content as string).trim();
       const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
@@ -522,24 +736,13 @@ export const startQuiz = action({
       throw new Error('Article not found: ' + args.articleId);
     }
 
-    let agentContext: string | undefined;
-    if (args.includeAgentContext) {
-      const world = await ctx.runQuery(internal.simulator.index.getWorldById, {
-        worldId: article.worldId,
-      });
-      if (world && world.publicStatements && world.publicStatements.length > 0) {
-        const statements = world.publicStatements.map(
-          (s: { agentName: string; statement: string }) => s.agentName + ': ' + s.statement,
-        );
-        agentContext = statements.join('\n');
-      }
-    }
+    const caseAndKPIs = await generateCaseAndStartingKPIs(article.summary);
 
     const questions = await generateScenarioQuestions(
-      article.summary,
+      caseAndKPIs.caseText,
       args.difficulty,
       args.numQuestions,
-      agentContext,
+      undefined,
     );
 
     const sessionId = await ctx.runMutation(internal.simulator.index.insertQuizSession, {
@@ -549,17 +752,24 @@ export const startQuiz = action({
       numQuestions: args.numQuestions,
       includeAgentContext: args.includeAgentContext,
       questions: questions,
+      caseText: caseAndKPIs.caseText,
+      kpiRationale: caseAndKPIs.kpiRationale,
     });
 
     await ctx.runMutation(internal.simulator.index.insertInitialKpiSnapshot, {
       sessionId: sessionId,
+      profit: caseAndKPIs.initialKPIs.profit,
+      marketShare: caseAndKPIs.initialKPIs.marketShare,
+      liquidity: caseAndKPIs.initialKPIs.liquidity,
+      trust: caseAndKPIs.initialKPIs.trust,
+      compliance: caseAndKPIs.initialKPIs.compliance,
     });
 
     return { sessionId };
   },
 });
 
-async function evaluateImpact(
+export async function evaluateImpact(
   scenario: string,
   selectedOptionText: string,
   currentKPIs: { profit: number; marketShare: number; liquidity: number; trust: number; compliance: number },
@@ -586,7 +796,7 @@ async function evaluateImpact(
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        temperature: 0.7,
+        temperature: 0.1,
       });
       const raw = (content as string).trim();
       const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
@@ -664,7 +874,7 @@ export const patchQuizSession = internalMutation({
   },
 });
 
-function clampKpi(value: number): number {
+export function clampKpi(value: number): number {
   return Math.max(-100, Math.min(100, value));
 }
 

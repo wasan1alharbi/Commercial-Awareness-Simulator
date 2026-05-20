@@ -90,13 +90,20 @@ export const agentGenerateMessage = internalAction({
       default:
         assertNever(args.type);
     }
-    const text = await completionFn(
+    let text = await completionFn(
       ctx,
       args.worldId,
       args.conversationId as GameId<'conversations'>,
       args.playerId as GameId<'players'>,
       args.otherPlayerId as GameId<'players'>,
     );
+
+    let leave = args.type === 'leave';
+    if (args.type === 'continue' && text.includes('[END]')) {
+      text = text.replace(/\[END\]/g, '').trim();
+      leave = true;
+      console.log(`Eval Agent-initiated leave: ${args.playerId} in conversation ${args.conversationId}`);
+    }
 
     await ctx.runMutation(internal.aiTown.agent.agentSendMessage, {
       worldId: args.worldId,
@@ -105,8 +112,58 @@ export const agentGenerateMessage = internalAction({
       playerId: args.playerId,
       text,
       messageUuid: args.messageUuid,
-      leaveConversation: args.type === 'leave',
+      leaveConversation: leave,
       operationId: args.operationId,
+    });
+  },
+});
+
+export const agentDecideOnInvite = internalAction({
+  args: {
+    worldId: v.id('worlds'),
+    operationId: v.string(),
+    agentId,
+    conversationId,
+    playerId,
+    otherPlayerId: playerId,
+  },
+  handler: async (ctx, args) => {
+    const data = await ctx.runQuery(internal.agent.conversation.queryPromptData, {
+      worldId: args.worldId,
+      playerId: args.playerId,
+      otherPlayerId: args.otherPlayerId,
+      conversationId: args.conversationId,
+    });
+    const inviterIsHuman = !!data.otherPlayer.human;
+    const otherDescription = inviterIsHuman
+      ? `${data.otherPlayer.name} is a human student observer asking to speak with you about the current situation.`
+      : `${data.otherPlayer.name} (role: ${data.otherAgent?.identity ?? 'unknown'}) is another company agent who wants to start a conversation with you.`;
+    const decisionGuidance = inviterIsHuman
+      ? `Decide if you are willing to engage. Most reasonable approaches should be accepted. Only decline (NO) if there is a clear, in-character business reason — e.g., you are in active litigation and cannot comment, the inviter represents a direct hostile competitor mid-crisis, or the topic is outside your industry. Otherwise reply YES.`
+      : `Decide if this conversation is likely to be relevant to your goals or business interests.`;
+    const systemPrompt =
+      `You are ${data.player.name}. Your role and background: ${data.agent.identity}\n` +
+      `${otherDescription}\n` +
+      `${decisionGuidance} ` +
+      `Reply with ONLY the word YES or the word NO. No explanation.`;
+    const { content } = await chatCompletion({
+      messages: [{ role: 'system', content: systemPrompt }],
+      max_tokens: 5,
+      temperature: 0.3,
+    });
+    const accept = (content as string).toUpperCase().includes('YES');
+    console.log(
+      `Eval Agent invite decision: ${data.player.name} ${accept ? 'accepted' : 'rejected'} invite from ${data.otherPlayer.name}`,
+    );
+    await ctx.runMutation(api.aiTown.main.sendInput, {
+      worldId: args.worldId,
+      name: 'finishDecidingOnInvite',
+      args: {
+        operationId: args.operationId,
+        agentId: args.agentId,
+        conversationId: args.conversationId,
+        accept,
+      },
     });
   },
 });
@@ -201,7 +258,6 @@ function wanderDestination(worldMap: WorldMap) {
 }
 
 async function pickGoalDrivenTarget(ctx: { runQuery: (ref: any, args: any) => Promise<any> }, worldId: string, goals: string[], otherFreePlayers: { id: string }[]) {
-  // get the names of all the free players so we can show them to the LLM
   const playerNames: { id: string; name: string }[] = await ctx.runQuery(internal.aiTown.agentOperations.getPlayerNames, {
     worldId,
     playerIds: otherFreePlayers.map((p) => p.id),
@@ -237,7 +293,6 @@ async function pickGoalDrivenTarget(ctx: { runQuery: (ref: any, args: any) => Pr
 
     const chosenName = result.content.trim();
 
-    // loop through the players and find the one the LLM picked
     let matchedPlayer = undefined;
     for (const p of playerNames) {
       if (p.name.toLowerCase() === chosenName.toLowerCase()) {

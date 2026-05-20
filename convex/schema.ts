@@ -30,6 +30,22 @@ export default defineSchema({
     submittedAt: v.number(),
   }).index('byWorld', ['worldId']),
 
+  articleSubmissionLog: defineTable({
+    worldId: v.id('worlds'),
+    submittedAt: v.number(),
+    charsIn: v.number(),
+    outcome: v.union(v.literal('accepted'), v.literal('rejected')),
+    rejectionStage: v.optional(
+      v.union(v.literal('too_short'), v.literal('duplicate'), v.literal('gate')),
+    ),
+    rejectionReason: v.optional(v.string()),
+    articleId: v.optional(v.id('articles')),
+    extractedCompaniesCount: v.optional(v.number()),
+    summaryChars: v.optional(v.number()),
+  })
+    .index('byWorld', ['worldId'])
+    .index('byOutcome', ['worldId', 'outcome']),
+
   quizSessions: defineTable({
     worldId: v.id('worlds'),
     articleId: v.id('articles'),
@@ -49,6 +65,8 @@ export default defineSchema({
     })),
     status: v.union(v.literal('active'), v.literal('completed')),
     createdAt: v.number(),
+    caseText: v.optional(v.string()),
+    kpiRationale: v.optional(v.string()),
   }).index('byWorld', ['worldId']),
 
   askChats: defineTable({

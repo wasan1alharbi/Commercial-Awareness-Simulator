@@ -44,7 +44,7 @@ export interface LLMConfig {
 }
 
 export function getLLMConfig(): LLMConfig {
-  let provider = process.env.LLM_PROVIDER;
+  const provider = process.env.LLM_PROVIDER;
   if (provider ? provider === 'openai' : process.env.OPENAI_API_KEY) {
     if (EMBEDDING_DIMENSION !== OPENAI_EMBEDDING_DIMENSION) {
       throw new Error('EMBEDDING_DIMENSION must be 1536 for OpenAI');
@@ -295,6 +295,9 @@ export async function retryWithBackoff<T>(
       const start = Date.now();
       const result = await fn();
       const ms = Date.now() - start;
+      if (i > 0) {
+        console.log(`LLM call recovered after ${i} retries (${ms}ms total)`);
+      }
       return { result, retries: i, ms };
     } catch (e) {
       const retryError = e as RetryError;

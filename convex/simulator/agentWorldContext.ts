@@ -10,7 +10,6 @@ export type WorldContextAction = {
   reflection?: string;
 };
 
-// get the agent description from the DB
 export const getAgentDescription = internalQuery({
   args: { agentDescriptionId: v.id('agentDescriptions') },
   handler: async (ctx, { agentDescriptionId }) => {
@@ -18,7 +17,6 @@ export const getAgentDescription = internalQuery({
   },
 });
 
-// get the current world context (article summary + public statements)
 export const getWorldContext = internalQuery({
   args: { worldId: v.id('worlds') },
   handler: async (ctx, { worldId }) => {
@@ -31,7 +29,6 @@ export const getWorldContext = internalQuery({
   },
 });
 
-// get the playerId for an agent inside a world (needed to insert memories)
 export const getPlayerIdForAgent = internalQuery({
   args: { worldId: v.id('worlds'), agentId: v.string() },
   handler: async (ctx, { worldId, agentId }) => {
@@ -48,8 +45,6 @@ export const getPlayerIdForAgent = internalQuery({
   },
 });
 
-// update the publicStatements array on the world document
-// if the agent already has a statement, replace it, otherwise add a new one
 export const updatePublicStatement = internalMutation({
   args: {
     worldId: v.id('worlds'),
@@ -62,15 +57,11 @@ export const updatePublicStatement = internalMutation({
       throw new Error('World not found: ' + worldId);
     }
 
-    // copy the existing statements so we can modify them
-    const existingStatements = world.publicStatements ?? [];
-    const newStatements = [...existingStatements];
+    const newStatements = [...(world.publicStatements ?? [])];
 
-    // check if this agent already has a statement
     let alreadyExists = false;
     for (let i = 0; i < newStatements.length; i++) {
       if (newStatements[i].agentName === agentName) {
-        // replace the old statement
         newStatements[i] = { agentName, statement, createdAt: Date.now() };
         alreadyExists = true;
         break;
@@ -121,7 +112,6 @@ async function callLLMForWorldContext(systemPrompt: string): Promise<WorldContex
   return result;
 }
 
-// main action: look at the world context and decide what to do next
 export const agentProcessWorldContext = internalAction({
   args: {
     agentId: v.string(),
@@ -139,7 +129,6 @@ export const agentProcessWorldContext = internalAction({
     reflection: v.optional(v.string()),
   }),
   handler: async (ctx, { agentId, worldId, operationId }): Promise<WorldContextAction> => {
-    // get the agent's identity info
     const agentDesc = await ctx.runQuery(
       internal.simulator.agentWorldContext.getAgentDescriptionByAgentId,
       { worldId, agentId },
@@ -148,7 +137,6 @@ export const agentProcessWorldContext = internalAction({
       throw new Error('AgentDescription not found for agent: ' + agentId);
     }
 
-    // get the current world context
     const world = await ctx.runQuery(
       internal.simulator.agentWorldContext.getWorldContext,
       { worldId },
@@ -157,7 +145,6 @@ export const agentProcessWorldContext = internalAction({
       throw new Error('World not found: ' + worldId);
     }
 
-    // build the prompt
     const name = agentDesc.name ?? 'Unknown Company';
     const industry = agentDesc.industry ?? 'Unknown Industry';
     const products = (agentDesc.products ?? []).join(', ') || 'N/A';
@@ -190,7 +177,19 @@ export const agentProcessWorldContext = internalAction({
     }
     systemPrompt += `\nCurrent news: ${currentArticleSummary}\n`;
     systemPrompt += `\nPublic statements from other companies:\n${statementsText}\n`;
-    systemPrompt += `Decide your next action. Return ONLY valid JSON:\n`;
+
+    systemPrompt += `\nVoice constraints — strict, non-negotiable:\n`;
+    systemPrompt += `- Do NOT begin your statement with "${name} acknowledges", "${name} recognizes", "${name} understands", or any similar boilerplate opener.\n`;
+    systemPrompt += `- Do NOT use any of these phrases anywhere in your output: "we are committed to", "we will continue to", "remains a top priority", "in light of", "navigate these challenges", "explore opportunities", "collaborative spirit", "monitor closely", "adapt our strategies".\n`;
+    systemPrompt += `- Speak in ${name}'s actual brand voice. Use vocabulary, sentence structure, and phrasing that ${name} would use in a real public communication, press call, or earnings statement.\n`;
+    systemPrompt += `- Vary sentence length. Mix short declarative statements with longer ones. Do not follow a template.\n`;
+
+    systemPrompt += `\nRelevance:\n`;
+    systemPrompt += `- Reference recent news ONLY if it materially affects ${name} — i.e. it concerns the ${industry} industry, your products (${products}), your competitors (${competitors}), your supply chain, or your regulatory environment.\n`;
+    systemPrompt += `- If a signal in the public statements above is not materially relevant to ${name}, IGNORE it. Do not reference it.\n`;
+    systemPrompt += `- It is better to make a short, narrowly-scoped statement about something genuinely relevant than a long statement about something tangential.\n`;
+
+    systemPrompt += `\nDecide your next action. Return ONLY valid JSON:\n`;
     systemPrompt += `{ "action": "seekAgent" | "makeStatement" | "reflect", "targetAgentName": string | null, "statement": string | null, "reflection": string | null }`;
 
     let lastError: any;
@@ -266,7 +265,7 @@ export const handleWorldContextAction = internalAction({
   },
   returns: v.object({ targetPlayerId: v.optional(v.string()) }),
   handler: async (ctx, args) => {
-    let agentDesc = await ctx.runQuery(
+    const agentDesc = await ctx.runQuery(
       internal.simulator.agentWorldContext.getAgentDescription,
       { agentDescriptionId: args.agentDescriptionId },
     );
@@ -296,13 +295,13 @@ export const handleWorldContextAction = internalAction({
       if (args.result.reflection !== undefined) {
         reflectionText = args.result.reflection;
       }
-      let playerId = await ctx.runQuery(
+      const playerId = await ctx.runQuery(
         internal.simulator.agentWorldContext.getPlayerIdForAgent,
         { worldId: args.worldId, agentId: args.agentId },
       );
       if (playerId !== null) {
-        let embeddingResult = await fetchEmbedding(reflectionText);
-        let textEmbedding = embeddingResult.embedding;
+        const embeddingResult = await fetchEmbedding(reflectionText);
+        const textEmbedding = embeddingResult.embedding;
         await ctx.runMutation(internal.agent.memory.insertMemory, {
           agentId: args.agentId,
           playerId: playerId,

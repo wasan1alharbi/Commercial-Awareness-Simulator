@@ -17,7 +17,7 @@ export default function PoweredByConvex() {
 
       <div className="absolute inset-0 flex p-6">
         <div className="flex flex-col gap-1 items-center">
-          <span className="font-system font-medium uppercase tracking-wider text-stone-600">
+          <span className="font-system font-medium uppercase text-stone-600">
             Powered by
           </span>
           <svg

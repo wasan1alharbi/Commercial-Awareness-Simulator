@@ -105,6 +105,7 @@ export async function continueConversationMessage(
   prompt.push(
     `Below is the current chat history between you and ${otherPlayer.name}.`,
     `DO NOT greet them again. Do NOT use the word "Hey" too often. Your response should be brief and within 200 characters.`,
+    `If the conversation has clearly reached a natural end after meaningful back-and-forth, and you have no more substantive points to make, finish your message with the exact token [END] on the last line. Do NOT use [END] in the first 2-3 messages. Give the conversation room to develop before ending it.`,
   );
 
   const llmMessages: LLMMessage[] = [
@@ -198,7 +199,6 @@ type WorldContext = {
 };
 
 function buildIdentityBlock(agent: AgentPromptData): string[] {
-  // Structured path — company agent with rich identity
   if (agent.industry || agent.motivation) {
     const lines = ['IDENTITY:'];
     if (agent.industry) lines.push(`  Industry: ${agent.industry}`);
@@ -210,7 +210,6 @@ function buildIdentityBlock(agent: AgentPromptData): string[] {
     if (agent.articleRelevance) lines.push(`  Current stance on news: ${agent.articleRelevance}`);
     return lines;
   }
-  // Legacy fallback — original AI Town characters
   return [`About you: ${agent.identity}`, `Your goals for the conversation: ${agent.plan}`];
 }
 
@@ -243,6 +242,26 @@ function agentPrompts(
   if (memories?.length) {
     lines.push('', 'MEMORIES (top 3 by relevance):');
     for (const m of memories.slice(0, 3)) lines.push(`  ${m.description}`);
+  }
+
+  if (agent && (agent.industry || agent.motivation)) {
+    const industry = agent.industry ?? 'your industry';
+    const products = (agent.products ?? []).join(', ');
+    const competitors = (agent.competitors ?? []).join(', ');
+
+    lines.push('');
+    lines.push('VOICE CONSTRAINTS — strict, non-negotiable:');
+    lines.push('- Do NOT open with phrases like "[Company] acknowledges", "[Company] recognizes", "[Company] understands", or any boilerplate opener.');
+    lines.push('- Do NOT use these phrases anywhere: "we are committed to", "we will continue to", "remains a top priority", "in light of", "navigate these challenges", "explore opportunities", "collaborative spirit", "monitor closely", "adapt our strategies", "looking forward to our collaboration", "excited to collaborate", "unlock new opportunities", "innovative solutions", "leverage", "synergy", "ecosystem".');
+    lines.push('- Speak in your actual brand voice — vocabulary and phrasing your company would use in a real public communication, earnings call, or press release.');
+    lines.push('- Vary sentence length. Mix short declarative statements with longer ones. Do not follow a template.');
+    lines.push('- Be concrete. Reference real products, real markets, real competitors. Avoid vague pleasantries.');
+
+    lines.push('');
+    lines.push('RELEVANCE — what to talk about:');
+    lines.push(`- Only discuss topics that materially affect your business — i.e. concerning ${industry}${products ? `, your products (${products})` : ''}${competitors ? `, your competitors (${competitors})` : ''}, your supply chain, or your regulatory environment.`);
+    lines.push('- If a topic raised by the other party is not relevant to your business, redirect or politely end the conversation.');
+    lines.push('- Do NOT make vague pleasantries about "collaboration" or "synergies". Be specific.');
   }
 
   return lines;

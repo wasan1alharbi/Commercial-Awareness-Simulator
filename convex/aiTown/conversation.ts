@@ -266,6 +266,14 @@ export const conversationInputs = {
       if (!invitee) {
         throw new Error(`Invalid player ID: ${inviteeId}`);
       }
+      // If the invitee is already in another conversation, interrupt it so the human can chat.
+      const existing = [...game.world.conversations.values()].find((c) =>
+        c.participants.has(inviteeId),
+      );
+      if (existing) {
+        console.log(`Human interrupting agent ${inviteeId} mid-conversation ${existing.id}`);
+        existing.stop(game, now);
+      }
       console.log(`Starting ${playerId} ${inviteeId}...`);
       const { conversationId, error } = Conversation.start(game, now, player, invitee);
       if (!conversationId) {
